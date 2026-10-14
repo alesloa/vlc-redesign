@@ -1,25 +1,52 @@
 # VLC Redesign
 
-A desktop GUI fork of VLC, based on the [VLC Redesign Figma project](https://www.figma.com/design/NbLN6ylrDsmWVVTS8Jo10z/VLC-Redesign--Community-?node-id=0-1). This fork updates the interface while keeping VLC's core and codec source unchanged.
+This fork brings [Juxtopposed’s VLC redesign](https://www.figma.com/community/file/1691465999134370980/vlc-redesign) to VLC’s native desktop interfaces. The interface and settings workflow are in active development, while VLC’s core and codec source remain unchanged.
 
-The redesign covers playback controls, the full and compact library, Queue, bookmarks, settings, menus, keyboard shortcuts, toolbar customization and onboarding. Media and settings values come from VLC's existing models and configuration metadata.
+The redesign covers the player, library, playback controls, Queue, settings, audio and video effects, menus, keyboard shortcuts and onboarding. Media and settings values come from VLC’s existing models and configuration metadata.
 
-*Player screenshot provided by the project owner.*
+[Screenshots](#screenshots) · [Builds and status](#builds-and-status) · [Figma design](https://www.figma.com/community/file/1691465999134370980/vlc-redesign) · [Build guide](modules/gui/redesign/BUILD.md) · [License](COPYING)
 
-![Redesigned VLC player on macOS with dark playback controls](modules/gui/redesign/screenshots/player-macos.png)
+## Screenshots
 
-<details>
-<summary>View the redesigned library</summary>
+These unedited screenshots were supplied by the project owner from the native macOS build. Image sources are recorded in the [screenshot provenance](modules/gui/redesign/screenshots/README.md).
 
-![Redesigned VLC library on macOS with sidebar navigation](modules/gui/redesign/screenshots/library-macos.png)
+### Player
 
-*Actual capture of the native macOS library.*
+![VLC’s redesigned native macOS player with dark playback controls](modules/gui/redesign/screenshots/player-macos.png)
 
-</details>
+### Library
 
-## Desktop preview status
+<table width="100%">
+  <tr>
+    <th width="50%">Library and navigation</th>
+    <th width="50%">Compact library during playback</th>
+  </tr>
+  <tr>
+    <td valign="top"><img src="modules/gui/redesign/screenshots/library-macos.png" alt="Native macOS Home library with sidebar navigation and the mini player" width="100%"></td>
+    <td valign="top"><img src="modules/gui/redesign/screenshots/compact-library-macos.jpg" alt="Compact native macOS library beside video playback" width="100%"></td>
+  </tr>
+</table>
 
-The interface and validation status below are recorded in the [implementation audit](modules/gui/redesign/IMPLEMENTATION.md) and [build notes](modules/gui/redesign/BUILD.md).
+### Settings and effects
+
+<table width="100%">
+  <tr>
+    <th width="50%">Global Settings</th>
+    <th width="50%">Audio and Video Effects</th>
+  </tr>
+  <tr>
+    <td valign="top"><img src="modules/gui/redesign/screenshots/settings-macos.png" alt="Global Settings with category navigation, theme selection and accent colors" width="100%"></td>
+    <td valign="top"><img src="modules/gui/redesign/screenshots/audio-video-effects-macos.png" alt="Compact Video Effects tabs and Audio Effects equalizer with opaque dark backgrounds" width="100%"></td>
+  </tr>
+</table>
+
+## Builds and status
+
+Download the official VLC player from [VideoLAN](https://www.videolan.org/vlc/).
+
+This repository’s own preview builds have not been published as GitHub releases yet. GitHub’s **Download ZIP** contains source code. To build this fork, follow the [VLC build instructions](INSTALL) and [redesign build guide](modules/gui/redesign/BUILD.md).
+
+The verification below comes from the [implementation audit](modules/gui/redesign/IMPLEMENTATION.md) and build notes.
 
 | Platform | Interface | Current verification |
 | --- | --- | --- |
@@ -27,9 +54,14 @@ The interface and validation status below are recorded in the [implementation au
 | Windows x64 | Qt | Compiled and smoke-tested under Wine; native GPU testing pending |
 | Linux ARM64 | Qt | Video and GUI tested on Ubuntu 26.04; system dependencies required |
 
-This is a development fork. Preview builds have not been published as GitHub releases yet. GitHub's **Download ZIP** contains source code; use the [VLC build instructions](INSTALL) and [redesign build notes](modules/gui/redesign/BUILD.md) to build the app.
+## Design and documentation
 
-The [redesign guide](modules/gui/redesign/README.md) covers the GUI changes. [Screenshot provenance](modules/gui/redesign/screenshots/README.md), [icon sources](modules/gui/redesign/icons/README.md) and [font licensing](modules/gui/redesign/fonts/README.md) are included in the repository.
+The visual design is by **Juxtopposed**. See the [original Figma Community project](https://www.figma.com/community/file/1691465999134370980/vlc-redesign), the [working Figma design file](https://www.figma.com/design/NbLN6ylrDsmWVVTS8Jo10z/VLC-Redesign--Community-?node-id=0-1), and the [design walkthrough](https://www.youtube.com/watch?v=ERFeOgqk324).
+
+The [redesign guide](modules/gui/redesign/README.md) describes the implementation. [Icon sources](modules/gui/redesign/icons/README.md), [font licensing](modules/gui/redesign/fonts/README.md) and [screenshot provenance](modules/gui/redesign/screenshots/README.md) are included in the repository.
+
+<details>
+<summary><strong>Upstream VLC documentation</strong></summary>
 
 ## Upstream VLC media player
 
@@ -171,3 +203,5 @@ share/             - Common resource files.
 src/               - libvlccore source code.
 test/              - Testing system.
 ```
+
+</details>
