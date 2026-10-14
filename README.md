@@ -1,4 +1,37 @@
-# VLC media player
+# VLC Redesign
+
+A desktop GUI fork of VLC, based on the [VLC Redesign Figma project](https://www.figma.com/design/NbLN6ylrDsmWVVTS8Jo10z/VLC-Redesign--Community-?node-id=0-1). This fork updates the interface while keeping VLC's core and codec source unchanged.
+
+The redesign covers playback controls, the full and compact library, Queue, bookmarks, settings, menus, keyboard shortcuts, toolbar customization and onboarding. Media and settings values come from VLC's existing models and configuration metadata.
+
+*Player screenshot provided by the project owner.*
+
+![Redesigned VLC player on macOS with dark playback controls](modules/gui/redesign/screenshots/player-macos.png)
+
+<details>
+<summary>View the redesigned library</summary>
+
+![Redesigned VLC library on macOS with sidebar navigation](modules/gui/redesign/screenshots/library-macos.png)
+
+*Actual capture of the native macOS library.*
+
+</details>
+
+## Desktop preview status
+
+The interface and validation status below are recorded in the [implementation audit](modules/gui/redesign/IMPLEMENTATION.md) and [build notes](modules/gui/redesign/BUILD.md).
+
+| Platform | Interface | Current verification |
+| --- | --- | --- |
+| macOS ARM64 | Native AppKit | Native video and GUI tested; ad-hoc signed preview |
+| Windows x64 | Qt | Compiled and smoke-tested under Wine; native GPU testing pending |
+| Linux ARM64 | Qt | Video and GUI tested on Ubuntu 26.04; system dependencies required |
+
+This is a development fork. Preview builds have not been published as GitHub releases yet. GitHub's **Download ZIP** contains source code; use the [VLC build instructions](INSTALL) and [redesign build notes](modules/gui/redesign/BUILD.md) to build the app.
+
+The [redesign guide](modules/gui/redesign/README.md) covers the GUI changes. [Screenshot provenance](modules/gui/redesign/screenshots/README.md), [icon sources](modules/gui/redesign/icons/README.md) and [font licensing](modules/gui/redesign/fonts/README.md) are included in the repository.
+
+## Upstream VLC media player
 
 **VLC** is a libre and open source **media player** and **multimedia engine**,
 focused on **playing everything**, and **running everywhere**.
@@ -17,7 +50,7 @@ The VideoLAN project was started at the university [École Centrale Paris](https
 relicensed VLC under the GPLv2 license in February 2001. Since then, VLC has
 been downloaded **billions** of times.
 
-## License
+### License
 
 **VLC** is released under the GPLv2 *(or later)* license.
 *On some platforms, it is de facto GPLv3, because of the licenses of dependencies*.
@@ -25,7 +58,7 @@ been downloaded **billions** of times.
 **libVLC**, the engine is released under the LGPLv2 *(or later)* license. \
 This allows embedding the engine in 3rd party applications, while letting them to be licensed under other licenses.
 
-# Platforms
+## Platforms
 
 VLC is available for the following platforms:
 - [Windows] *(from 7 and later, including UWP platforms and all versions of Windows 10)*
@@ -49,7 +82,7 @@ Not all platforms receive the same amount of care, due to our limited resources.
 the [iOS app](https://code.videolan.org/videolan/vlc-ios/) are located in different repositories
 than the main one.
 
-# Contributing & Community
+## Contributing & Community
 
 **VLC** is maintained by a community of people, and VideoLAN is not paying any of them.\
 The community is composed of developers, helpers, maintainers, designers and writers that want
@@ -75,13 +108,13 @@ We are on IRC. You can find us on the **#videolan** channel on *[Libera.chat]*.
 
 [Libera.chat]: https://libera.chat
 
-## Contributions
+### Contributions
 
 Contributions are now done through Merge Requests on our [GitLab repository](https://code.videolan.org/videolan/vlc/).
 
 CI and discussions should be resolved before a Merge Request can be merged.
 
-# libVLC
+## libVLC
 
 **libVLC** is an embeddable engine for 3rd party applications and frameworks.
 
@@ -91,9 +124,9 @@ streaming and conversion of multimedia files and streams.
 
 **libVLC** has numerous bindings for other languages, such as C++, Python and C#.
 
-# Support
+## Support
 
-## Links
+### Links
 
 Some useful links that might help you:
 
@@ -106,7 +139,7 @@ Some useful links that might help you:
 - [Bugtracker](https://code.videolan.org/videolan/vlc/-/issues)
 - [VideoLAN web site](https://www.videolan.org/)
 
-## Source Code sitemap
+### Source Code sitemap
 ```
 ABOUT-NLS          - Notes on the Free Translation Project.
 AUTHORS            - VLC authors.
