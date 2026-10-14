@@ -26,6 +26,9 @@
 #import <vlc_configuration.h>
 #import <vlc_modules.h>
 #import <vlc_url.h>
+#import <vlc_actions.h>
+#import <vlc_dialog.h>
+#include <errno.h>
 
 #import "extensions/NSString+Helpers.h"
 
@@ -42,6 +45,7 @@
 #import "windows/video/VLCVoutView.h"
 #import "windows/video/VLCMainVideoViewController.h"
 #import "windows/video/VLCVideoWindowCommon.h"
+#import "windows/video/VLCVideoOutputProvider.h"
 
 NSString *VLCPlayerElementaryStreamID = @"VLCPlayerElementaryStreamID";
 NSString *VLCTick = @"VLCTick";
@@ -112,6 +116,11 @@ const CGFloat VLCVolumeDefault = 1.;
     VLCInputItem *_currentMedia;
 
     struct vlc_player_timer_point _player_time;
+    vlc_action_id_t _frameFeedbackAction;
+    uint64_t _frameFeedbackGeneration;
+    BOOL _frameFeedbackTerminated;
+    float _frameFeedbackConfirmedVolume;
+    BOOL _frameFeedbackConfirmedMute;
 }
 
 @property (readwrite, atomic) iTunesApplication *appleMusicApp;
@@ -154,6 +163,8 @@ const CGFloat VLCVolumeDefault = 1.;
 - (void)ABLoopStateChanged:(enum vlc_player_abloop)abLoopState;
 - (void)metaDataChangedForInput:(input_item_t *)inputItem;
 - (void)voutListUpdated;
+- (void)recordPlaybackFeedbackAction:(vlc_action_id_t)action;
+- (void)frameFeedbackStatus:(int)status forward:(BOOL)forward;
 
 /* video */
 - (void)fullscreenChanged:(BOOL)isFullscreen;
@@ -452,6 +463,18 @@ static void cb_player_vout_changed(vlc_player_t * __unused p_player,
     });
 }
 
+static void cb_player_next_frame_status(vlc_player_t *player, int status, void *data)
+{
+    VLC_UNUSED(player);
+    [(__bridge VLCPlayerController *)data frameFeedbackStatus:status forward:YES];
+}
+
+static void cb_player_previous_frame_status(vlc_player_t *player, int status, void *data)
+{
+    VLC_UNUSED(player);
+    [(__bridge VLCPlayerController *)data frameFeedbackStatus:status forward:NO];
+}
+
 static void cb_player_timer_updated(const struct vlc_player_timer_point * const p_value, void * const p_data)
 {
     VLCPlayerController * const playerController = (__bridge VLCPlayerController *)p_data;
@@ -522,7 +545,7 @@ static void cb_player_timer_seeked(const struct vlc_player_timer_point * const p
         const vlc_tick_t system_now = vlc_tick_now();
         if ([playerController interpolateTime:system_now] == VLC_SUCCESS) {
             [playerController updatePosition];
-            [playerController updateTime:system_now forceUpdate:NO];
+            [playerController updateTime:system_now forceUpdate:YES];
         }
     });
 }
@@ -560,6 +583,8 @@ static const struct vlc_player_cbs player_callbacks = {
     .on_media_subitems_changed = NULL,
     .on_vout_changed = cb_player_vout_changed,
     .on_cork_changed = NULL,
+    .on_next_frame_status = cb_player_next_frame_status,
+    .on_prev_frame_status = cb_player_previous_frame_status,
 };
 
 static const struct vlc_player_timer_cbs player_timer_callbacks = {
@@ -636,6 +661,17 @@ static int BossCallback(vlc_object_t *p_this,
     }
 }
 
+static int PlaybackFeedbackActionCallback(vlc_object_t *object, const char *name,
+                                          vlc_value_t oldValue, vlc_value_t newValue,
+                                          void *data)
+{
+    VLC_UNUSED(object); VLC_UNUSED(name); VLC_UNUSED(oldValue);
+    @autoreleasepool {
+        [(__bridge VLCPlayerController *)data recordPlaybackFeedbackAction:(vlc_action_id_t)newValue.i_int];
+    }
+    return VLC_SUCCESS;
+}
+
 #pragma mark - controller initialization
 
 @implementation VLCPlayerController
@@ -675,9 +711,11 @@ static int BossCallback(vlc_object_t *p_this,
 
         const float aoutVolume = vlc_player_aout_GetVolume(_p_player);
         _volume = aoutVolume >= 0.f ? aoutVolume : VLCVolumeDefault;
+        _frameFeedbackConfirmedVolume = _volume;
 
         const int aoutMute = vlc_player_aout_IsMuted(_p_player);
         _mute = aoutMute == -1 ? NO : aoutMute;
+        _frameFeedbackConfirmedMute = _mute;
 
         _aLoopTime = -1;
         _bLoopTime = -1;
@@ -690,6 +728,7 @@ static int BossCallback(vlc_object_t *p_this,
 
         libvlc_int_t *libvlc = vlc_object_instance(getIntf());
         var_AddCallback(libvlc, "intf-boss", BossCallback, (__bridge void *)self);
+        var_AddCallback(libvlc, "key-action", PlaybackFeedbackActionCallback, (__bridge void *)self);
     }
 
     return self;
@@ -719,8 +758,18 @@ static int BossCallback(vlc_object_t *p_this,
 
 - (void)applicationWillTerminate:(NSNotification *)aNotification
 {
+    [self.positionTimer invalidate];
+    self.positionTimer = nil;
+    [self.timeTimer invalidate];
+    self.timeTimer = nil;
+
     libvlc_int_t *libvlc = vlc_object_instance(getIntf());
     var_DelCallback(libvlc, "intf-boss", BossCallback, (__bridge void *)self);
+    var_DelCallback(libvlc, "key-action", PlaybackFeedbackActionCallback, (__bridge void *)self);
+    @synchronized (self) {
+        _frameFeedbackTerminated = YES;
+        ++_frameFeedbackGeneration;
+    }
 
     [self onPlaybackHasTruelyEnded:nil];
     [_remoteControlService unsubscribeFromRemoteCommands];
@@ -860,6 +909,8 @@ static int BossCallback(vlc_object_t *p_this,
 
 - (void)nextVideoFrame
 {
+    [self recordPlaybackFeedbackAction:ACTIONID_FRAME_NEXT];
+    [self clearPlaybackFeedback];
     vlc_player_Lock(_p_player);
     vlc_player_NextVideoFrame(_p_player);
     vlc_player_Unlock(_p_player);
@@ -869,6 +920,7 @@ static int BossCallback(vlc_object_t *p_this,
 
 - (void)currentMediaItemChanged:(input_item_t *)newMediaItem
 {
+    [self recordPlaybackFeedbackAction:ACTIONID_NONE];
     _currentMedia = [[VLCInputItem alloc] initWithInputItem:newMediaItem];
 
     NSString *syltData = nil;
@@ -1161,6 +1213,13 @@ static int BossCallback(vlc_object_t *p_this,
 
 - (void)updateTimeWithTimer:(NSTimer *)timer
 {
+    if (timer != self.timeTimer) {
+        return;
+    }
+    // Invalidate before updating so the next media-second boundary is rearmed.
+    [timer invalidate];
+    self.timeTimer = nil;
+
     const vlc_tick_t system_now = vlc_tick_now();
     if ([self interpolateTime:system_now] == VLC_SUCCESS) {
         [self updateTime:system_now forceUpdate:NO];
@@ -1190,6 +1249,7 @@ static int BossCallback(vlc_object_t *p_this,
                                                    selector:@selector(updateTimeWithTimer:)
                                                    userInfo:nil
                                                     repeats:NO];
+            [NSRunLoop.mainRunLoop addTimer:self.timeTimer forMode:NSRunLoopCommonModes];
         }
     }
 }
@@ -1981,7 +2041,94 @@ static int BossCallback(vlc_object_t *p_this,
 
 - (void)displayOSDMessage:(NSString *)message
 {
-    vlc_player_osd_Message(_p_player, [message UTF8String]);
+    vlc_player_Lock(_p_player);
+    vlc_player_osd_Message(_p_player, "%s", message.UTF8String);
+    vlc_player_Unlock(_p_player);
+}
+
+- (void)displaySeekFeedback
+{
+    if (!NSThread.isMainThread) {
+        dispatch_async(dispatch_get_main_queue(), ^{ [self displaySeekFeedback]; });
+        return;
+    }
+
+    [self recordPlaybackFeedbackAction:ACTIONID_NONE];
+
+    NSMutableSet<VLCMainVideoViewController *> *controllers = [[NSMutableSet alloc] init];
+    for (VLCVideoWindowCommon *window in VLCMain.sharedInstance.voutProvider.voutWindows.allValues) {
+        if (window.videoViewController)
+            [controllers addObject:window.videoViewController];
+    }
+    for (VLCMainVideoViewController *controller in controllers)
+        [controller displaySeekFeedback];
+}
+
+- (void)clearPlaybackFeedback
+{
+    if (!NSThread.isMainThread) {
+        dispatch_async(dispatch_get_main_queue(), ^{ [self clearPlaybackFeedback]; });
+        return;
+    }
+    for (VLCVideoWindowCommon *window in VLCMain.sharedInstance.voutProvider.voutWindows.allValues)
+        [window.videoViewController clearPlaybackFeedback];
+}
+
+- (void)recordPlaybackFeedbackAction:(vlc_action_id_t)action
+{
+    uint64_t generation;
+    @synchronized (self) {
+        _frameFeedbackAction = action;
+        generation = ++_frameFeedbackGeneration;
+    }
+    if (NSThread.isMainThread) {
+        [self clearPlaybackFeedback];
+    } else {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            @synchronized (self) {
+                if (self->_frameFeedbackTerminated || generation != self->_frameFeedbackGeneration)
+                    return;
+            }
+            [self clearPlaybackFeedback];
+        });
+    }
+}
+
+- (void)frameFeedbackStatus:(int)status forward:(BOOL)forward
+{
+    if (status == -EAGAIN)
+        return;
+    if (status != 0) {
+        // Preserve the default player status/error behavior from src/player/input.c.
+        const char *reason;
+        switch (status) {
+            case -ERANGE: reason = "can't seek back"; break;
+            case -EBUSY: reason = "no video found"; break;
+            case -ENOTSUP: reason = "can't pause/seek/pace"; break;
+            default: reason = "invalid state"; break;
+        }
+        const char *title = forward ? "Next frame error" : "Previous frame error";
+        vlc_dialog_display_error(getIntf(), vlc_gettext(title), "%s", vlc_gettext(reason));
+        return;
+    }
+
+    const vlc_action_id_t expected = forward ? ACTIONID_FRAME_NEXT : ACTIONID_FRAME_PREVIOUS;
+    uint64_t generation;
+    @synchronized (self) {
+        if (_frameFeedbackTerminated || _frameFeedbackAction != expected)
+            return;
+        generation = _frameFeedbackGeneration;
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        @synchronized (self) {
+            if (self->_frameFeedbackTerminated || generation != self->_frameFeedbackGeneration ||
+                self->_frameFeedbackAction != expected)
+                return;
+        }
+        NSString * const message = forward ? _NS("Next frame") : _NS("Previous frame");
+        for (VLCVideoWindowCommon *window in VLCMain.sharedInstance.voutProvider.voutWindows.allValues)
+            [window.videoViewController displayPlaybackFeedback:message];
+    });
 }
 
 - (void)setAspectRatioIsLocked:(BOOL)b_value
@@ -1998,6 +2145,11 @@ static int BossCallback(vlc_object_t *p_this,
 
 - (void)volumeChanged:(float)volume
 {
+    const float confirmedVolume = vlc_player_aout_GetVolume(_p_player);
+    if (confirmedVolume >= 0.f && confirmedVolume != _frameFeedbackConfirmedVolume) {
+        _frameFeedbackConfirmedVolume = confirmedVolume;
+        [self recordPlaybackFeedbackAction:ACTIONID_NONE];
+    }
     _volume = volume;
     [_defaultNotificationCenter postNotificationName:VLCPlayerVolumeChanged
                                               object:self];
@@ -2022,6 +2174,11 @@ static int BossCallback(vlc_object_t *p_this,
 
 - (void)muteChanged:(BOOL)mute
 {
+    const int confirmedMute = vlc_player_aout_IsMuted(_p_player);
+    if (confirmedMute >= 0 && (BOOL)confirmedMute != _frameFeedbackConfirmedMute) {
+        _frameFeedbackConfirmedMute = confirmedMute;
+        [self recordPlaybackFeedbackAction:ACTIONID_NONE];
+    }
     _mute = mute;
     [_defaultNotificationCenter postNotificationName:VLCPlayerMuteChanged
                                               object:self];

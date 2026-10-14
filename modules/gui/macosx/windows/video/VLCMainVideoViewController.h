@@ -85,6 +85,9 @@ extern NSString * const VLCUseClassicVideoPlayerLayoutKey;
 - (nullable NSView *)acquireVideoView;
 - (void)returnVideoView:(NSView *)videoView;
 - (void)displayPlaybackEndView;
+- (void)displaySeekFeedback;
+- (void)displayPlaybackFeedback:(NSString *)message;
+- (void)clearPlaybackFeedback;
 
 - (IBAction)togglePlayQueue:(id)sender;
 - (IBAction)returnToLibrary:(id)sender;

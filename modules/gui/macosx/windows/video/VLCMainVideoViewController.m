@@ -23,10 +23,13 @@
 
 #import "VLCMainVideoViewController.h"
 #import "extensions/NSColor+VLCAdditions.h"
+#import "extensions/NSFont+VLCAdditions.h"
 #import "views/VLCVolumeSlider.h"
 #import "views/VLCTimeField.h"
 
 #import <vlc_common.h>
+#import <vlc_aout.h>
+#include <math.h>
 
 #import "extensions/NSAnimationContext+VLCAdditions.h"
 #import "extensions/NSView+VLCAdditions.h"
@@ -63,6 +66,14 @@
 #import "windows/video/VLCFullVideoViewWindow.h"
 
 NSString * const VLCUseClassicVideoPlayerLayoutKey = @"VLCUseClassicVideoPlayerLayoutKey";
+
+// A feedback plaque never intercepts clicks intended for the video.
+@interface VLCPlaybackFeedbackView : NSView
+@end
+
+@implementation VLCPlaybackFeedbackView
+- (NSView *)hitTest:(NSPoint)point { return nil; }
+@end
 
 @interface PIPVoutViewController : NSViewController
 @property (nonatomic) NSRect previousBounds;
@@ -134,6 +145,14 @@ NSString * const VLCUseClassicVideoPlayerLayoutKey = @"VLCUseClassicVideoPlayerL
 @property VLCPlayerStatisticsView *statisticsOverlay;
 @property NSPopover *queuePopover;
 @property BOOL queuePreviousAutohide;
+@property VLCPlaybackFeedbackView *playbackFeedbackView;
+@property NSTextField *playbackFeedbackMessage;
+@property NSTextField *playbackFeedbackDetail;
+@property NSTimer *playbackFeedbackTimer;
+@property BOOL playbackFeedbackShowsTime;
+@property float feedbackAudioVolume;
+@property int feedbackAudioMute;
+@property BOOL feedbackHasAudioState;
 
 @end
 
@@ -174,6 +193,14 @@ NSString * const VLCUseClassicVideoPlayerLayoutKey = @"VLCUseClassicVideoPlayerL
                                selector:@selector(pictureInPictureChanged:)
                                    name:VLCPlayerPictureInPictureChanged
                                  object:nil];
+        [notificationCenter addObserver:self selector:@selector(playbackFeedbackTimeChanged:)
+                                   name:VLCPlayerTimeAndPositionChanged object:nil];
+        [notificationCenter addObserver:self selector:@selector(playbackFeedbackAudioChanged:)
+                                   name:VLCPlayerVolumeChanged object:nil];
+        [notificationCenter addObserver:self selector:@selector(playbackFeedbackAudioChanged:)
+                                   name:VLCPlayerMuteChanged object:nil];
+        [notificationCenter addObserver:self selector:@selector(playbackFeedbackStateChanged:)
+                                   name:VLCPlayerStateChanged object:nil];
 
         Class PIPViewControllerClass = NSClassFromString(@"PIPViewController");
         _pipViewController = [[PIPViewControllerClass alloc] init];
@@ -247,6 +274,8 @@ NSString * const VLCUseClassicVideoPlayerLayoutKey = @"VLCUseClassicVideoPlayerL
     [self updateLyricsInsets];
     
     [self configureVideoContentConstraints];
+    [self setupPlaybackFeedback];
+    [self updatePlaybackFeedbackAudioStateDisplayingChanges:NO];
     [self setupCompactLibrary];
     [self setupPlayerCustomization];
     if (self.classic) {
@@ -295,6 +324,211 @@ NSString * const VLCUseClassicVideoPlayerLayoutKey = @"VLCUseClassicVideoPlayerL
     ]];
     self.view.wantsLayer = YES;
     self.view.layer.backgroundColor = NSColor.blackColor.CGColor;
+}
+
+- (void)setupPlaybackFeedback
+{
+    self.playbackFeedbackView = [[VLCPlaybackFeedbackView alloc] init];
+    self.playbackFeedbackView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.playbackFeedbackView.wantsLayer = YES;
+    self.playbackFeedbackView.layer.backgroundColor = [NSColor.blackColor colorWithAlphaComponent:.95].CGColor;
+    self.playbackFeedbackView.layer.cornerRadius = VLCUIUnits.cornerRadius;
+    self.playbackFeedbackView.hidden = YES;
+
+    self.playbackFeedbackMessage = [NSTextField labelWithString:@""];
+    self.playbackFeedbackMessage.identifier = @"VLCPlaybackFeedbackMessage";
+    self.playbackFeedbackMessage.font = [NSFont vlc_redesignFontOfSize:15 weight:NSFontWeightRegular];
+    self.playbackFeedbackDetail = [NSTextField labelWithString:@""];
+    self.playbackFeedbackDetail.identifier = @"VLCPlaybackFeedbackDetail";
+    self.playbackFeedbackDetail.font = [NSFont vlc_redesignFontOfSize:15 weight:NSFontWeightRegular];
+    for (NSTextField *field in @[self.playbackFeedbackMessage, self.playbackFeedbackDetail]) {
+        field.textColor = NSColor.whiteColor;
+        field.alignment = NSTextAlignmentRight;
+        field.lineBreakMode = NSLineBreakByTruncatingTail;
+        [field setContentCompressionResistancePriority:NSLayoutPriorityRequired
+                                       forOrientation:NSLayoutConstraintOrientationHorizontal];
+    }
+    NSStackView *stack = [NSStackView stackViewWithViews:@[self.playbackFeedbackMessage, self.playbackFeedbackDetail]];
+    stack.orientation = NSUserInterfaceLayoutOrientationVertical;
+    stack.alignment = NSLayoutAttributeTrailing;
+    stack.spacing = VLCUIUnits.smallSpacing;
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.playbackFeedbackView addSubview:stack];
+    [self.voutContainingView addSubview:self.playbackFeedbackView positioned:NSWindowAbove relativeTo:nil];
+    const CGFloat margin = VLCUIUnits.largeSpacing;
+    const CGFloat padding = VLCUIUnits.mediumSpacing;
+    // All constraints affect only the plaque, leaving the video rectangle fixed.
+    [NSLayoutConstraint activateConstraints:@[
+        [self.playbackFeedbackView.topAnchor constraintEqualToAnchor:self.voutContainingView.topAnchor constant:margin],
+        [self.playbackFeedbackView.trailingAnchor constraintEqualToAnchor:self.voutContainingView.trailingAnchor constant:-margin],
+        [self.playbackFeedbackView.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.voutContainingView.leadingAnchor constant:margin],
+        [stack.topAnchor constraintEqualToAnchor:self.playbackFeedbackView.topAnchor constant:padding],
+        [stack.bottomAnchor constraintEqualToAnchor:self.playbackFeedbackView.bottomAnchor constant:-padding],
+        [stack.leadingAnchor constraintEqualToAnchor:self.playbackFeedbackView.leadingAnchor constant:padding],
+        [stack.trailingAnchor constraintEqualToAnchor:self.playbackFeedbackView.trailingAnchor constant:-padding]
+    ]];
+}
+
+- (BOOL)playbackFeedbackIsEnabled
+{
+    if (!self.isViewLoaded)
+        return NO;
+    vout_thread_t * const vout = self.voutView.voutThread;
+    if (!vout)
+        return NO;
+    const BOOL enabled = var_InheritBool(vout, "osd");
+    vout_Release(vout);
+    return enabled;
+}
+
+- (void)clearCorePlaybackMessage
+{
+    vout_thread_t * const vout = self.voutView.voutThread;
+    if (vout) {
+        // Preserve subtitle channels and both fullscreen OSD slider channels.
+        vout_FlushSubpictureChannel(vout, VOUT_SPU_CHANNEL_OSD);
+        vout_Release(vout);
+    }
+}
+
+- (void)showPlaybackFeedback
+{
+    if (![self playbackFeedbackIsEnabled]) {
+        [self hidePlaybackFeedback];
+        return;
+    }
+    [self clearCorePlaybackMessage];
+    self.playbackFeedbackView.hidden = NO;
+    [self.voutContainingView layoutSubtreeIfNeeded];
+    [self.playbackFeedbackTimer invalidate];
+    // vout_OSDMessageVa uses exactly VLC_TICK_FROM_SEC(1) in video_text.c.
+    __weak typeof(self) weakSelf = self;
+    self.playbackFeedbackTimer = [NSTimer timerWithTimeInterval:SEC_FROM_VLC_TICK(VLC_TICK_FROM_SEC(1))
+                                                       repeats:NO block:^(NSTimer *timer) {
+        VLCMainVideoViewController * const controller = weakSelf;
+        if (timer == controller.playbackFeedbackTimer)
+            [controller hidePlaybackFeedback];
+    }];
+    [NSRunLoop.mainRunLoop addTimer:self.playbackFeedbackTimer forMode:NSRunLoopCommonModes];
+}
+
+- (void)hidePlaybackFeedback
+{
+    [self.playbackFeedbackTimer invalidate];
+    self.playbackFeedbackTimer = nil;
+    self.playbackFeedbackView.hidden = YES;
+    self.playbackFeedbackShowsTime = NO;
+}
+
+- (void)clearPlaybackFeedback
+{
+    [self hidePlaybackFeedback];
+}
+
+- (void)displaySeekFeedback
+{
+    if (![self playbackFeedbackIsEnabled])
+        return;
+    self.playbackFeedbackShowsTime = YES;
+    self.playbackFeedbackMessage.stringValue = @"";
+    self.playbackFeedbackMessage.hidden = YES;
+    [self updatePlaybackFeedbackTime];
+    [self showPlaybackFeedback];
+}
+
+- (void)displayPlaybackFeedback:(NSString *)message
+{
+    if (![self playbackFeedbackIsEnabled])
+        return;
+    self.playbackFeedbackShowsTime = NO;
+    self.playbackFeedbackMessage.stringValue = message;
+    self.playbackFeedbackMessage.hidden = NO;
+    self.playbackFeedbackDetail.stringValue = @"";
+    self.playbackFeedbackDetail.hidden = YES;
+    [self showPlaybackFeedback];
+}
+
+- (void)updatePlaybackFeedbackTime
+{
+    VLCPlayerController * const player = VLCMain.sharedInstance.playQueueController.playerController;
+    const vlc_tick_t time = player.time;
+    if (time == VLC_TICK_INVALID) {
+        self.playbackFeedbackDetail.stringValue = @"";
+        self.playbackFeedbackDetail.hidden = YES;
+        return;
+    }
+    self.playbackFeedbackDetail.stringValue = [NSString stringWithTimeFromTicks:time];
+    self.playbackFeedbackDetail.hidden = NO;
+    [self.voutContainingView layoutSubtreeIfNeeded];
+}
+
+- (void)playbackFeedbackTimeChanged:(NSNotification *)notification
+{
+    if (notification.object != VLCMain.sharedInstance.playQueueController.playerController ||
+        self.playbackFeedbackView.hidden || !self.playbackFeedbackShowsTime)
+        return;
+    if (![self playbackFeedbackIsEnabled]) {
+        [self hidePlaybackFeedback];
+        return;
+    }
+    [self updatePlaybackFeedbackTime];
+    [self clearCorePlaybackMessage];
+}
+
+- (void)updatePlaybackFeedbackAudioStateDisplayingChanges:(BOOL)displayChanges
+{
+    VLCPlayerController * const player = VLCMain.sharedInstance.playQueueController.playerController;
+    audio_output_t * const aout = player.mainAudioOutput;
+    if (!aout) {
+        if (!self.feedbackHasAudioState) {
+            self.feedbackAudioVolume = player.volume;
+            self.feedbackAudioMute = player.mute;
+            self.feedbackHasAudioState = YES;
+        }
+        return;
+    }
+    const float volume = aout_VolumeGet(aout);
+    const int muted = aout_MuteGet(aout);
+    aout_Release(aout);
+    if (!isfinite(volume) || volume < 0.f || muted < 0)
+        return;
+
+    const BOOL changed = self.feedbackHasAudioState &&
+        (volume != self.feedbackAudioVolume || muted != self.feedbackAudioMute);
+    self.feedbackAudioVolume = volume;
+    self.feedbackAudioMute = muted;
+    self.feedbackHasAudioState = YES;
+    if (!displayChanges || !changed || ![self playbackFeedbackIsEnabled])
+        return;
+
+    // Match core rounding and copy, using the actual audio output, not slider requests.
+    NSString * const percentage = [NSString stringWithFormat:_NS("Volume: %ld%%"), lroundf(volume * 100.f)];
+    self.playbackFeedbackShowsTime = NO;
+    self.playbackFeedbackMessage.stringValue = muted ? _NS("Muted") : percentage;
+    self.playbackFeedbackMessage.hidden = NO;
+    self.playbackFeedbackDetail.stringValue = muted ? percentage : @"";
+    self.playbackFeedbackDetail.hidden = !muted;
+    [self showPlaybackFeedback];
+}
+
+- (void)playbackFeedbackAudioChanged:(NSNotification *)notification
+{
+    if (notification.object == VLCMain.sharedInstance.playQueueController.playerController)
+        [self updatePlaybackFeedbackAudioStateDisplayingChanges:YES];
+}
+
+- (void)playbackFeedbackStateChanged:(NSNotification *)notification
+{
+    VLCPlayerController * const player = notification.object;
+    if (player == VLCMain.sharedInstance.playQueueController.playerController &&
+        player.playerState != VLC_PLAYER_STATE_PLAYING && player.playerState != VLC_PLAYER_STATE_PAUSED)
+        [self hidePlaybackFeedback];
+}
+
+- (void)dealloc
+{
+    [self.playbackFeedbackTimer invalidate];
+    [NSNotificationCenter.defaultCenter removeObserver:self];
 }
 
 - (void)setupCompactLibrary
@@ -597,6 +831,8 @@ NSString * const VLCUseClassicVideoPlayerLayoutKey = @"VLCUseClassicVideoPlayerL
     NSAssert(controller != nil, 
              @"Player current media item changed notification should have valid player controller");
     [self updateDecorativeViewVisibilityOnControllerChange:controller];
+    [self hidePlaybackFeedback];
+    [self updatePlaybackFeedbackAudioStateDisplayingChanges:NO];
 
     // New item playing, dismiss playback end view
     [self.playbackEndViewController.countdownTimer invalidate];

@@ -865,9 +865,15 @@ extern const CGFloat VLCVolumeDefault;
 - (void)takeSnapshot;
 
 /**
- * displays a OSD message format string
+ * displays an OSD message as plain text
  */
 - (void)displayOSDMessage:(NSString *)message;
+
+/**
+ * displays native seek feedback over the active video views
+ */
+- (void)displaySeekFeedback;
+- (void)clearPlaybackFeedback;
 
 /**
  * defines whether the vout windows lock on the video's AR or can be resized arbitrarily

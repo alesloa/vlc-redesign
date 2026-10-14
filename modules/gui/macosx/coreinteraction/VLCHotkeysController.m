@@ -38,6 +38,8 @@
 {
     NSArray *_usedHotkeys;
 }
+- (void)displaySeekFeedbackForKeycode:(uint32_t)keycode instance:(vlc_object_t *)instance;
+- (void)clearPlaybackFeedbackForFrameKeycode:(uint32_t)keycode instance:(vlc_object_t *)instance;
 @end
 
 @implementation VLCHotkeysController
@@ -112,7 +114,10 @@
                 [playerController toggleFullscreen];
             } else if (p_vout) {
                 val.i_int |= (int)CocoaKeyToVLC(key);
-                var_Set(vlc_object_instance(p_vout), "key-pressed", val);
+                vlc_object_t * const instance = VLC_OBJECT(vlc_object_instance(p_vout));
+                [self clearPlaybackFeedbackForFrameKeycode:(uint32_t)val.i_int instance:instance];
+                var_Set(instance, "key-pressed", val);
+                [self displaySeekFeedbackForKeycode:(uint32_t)val.i_int instance:instance];
             }
             else
                 msg_Dbg(getIntf(), "could not send keyevent to VLC core");
@@ -258,12 +263,102 @@
         }
 
         if (b_found_key) {
-            var_SetInteger(vlc_object_instance(p_intf), "key-pressed", val.i_int);
+            vlc_object_t * const instance = VLC_OBJECT(vlc_object_instance(p_intf));
+            [self clearPlaybackFeedbackForFrameKeycode:(uint32_t)val.i_int instance:instance];
+            var_SetInteger(instance, "key-pressed", val.i_int);
+            [self displaySeekFeedbackForKeycode:(uint32_t)val.i_int instance:instance];
             return YES;
         }
     }
 
     return NO;
+}
+
+- (void)clearPlaybackFeedbackForFrameKeycode:(uint32_t)keycode instance:(vlc_object_t *)instance
+{
+    const char * const frameActions[] = {"frame-next", "frame-previous"};
+    for (size_t i = 0; i < sizeof(frameActions) / sizeof(frameActions[0]); ++i) {
+        uint_fast32_t *configuredKeys = NULL;
+        const size_t count = vlc_actions_get_keycodes(instance, frameActions[i], false, &configuredKeys);
+        BOOL matches = NO;
+        for (size_t keyIndex = 0; keyIndex < count; ++keyIndex) {
+            if (configuredKeys[keyIndex] == keycode) {
+                matches = YES;
+                break;
+            }
+        }
+        free(configuredKeys);
+        if (matches) {
+            [VLCMain.sharedInstance.playQueueController.playerController clearPlaybackFeedback];
+            return;
+        }
+    }
+}
+
+- (void)displaySeekFeedbackForKeycode:(uint32_t)keycode instance:(vlc_object_t *)instance
+{
+    // Use the action resolved by VLC, rather than assuming an arrow always seeks.
+    // Verify its configured keycodes because an unbound key leaves key-action unchanged.
+    const vlc_action_id_t action = (vlc_action_id_t)var_GetInteger(instance, "key-action");
+    static const struct {
+        vlc_action_id_t action;
+        const char *name;
+        const char *interval;
+        BOOL navigation;
+    } seeks[] = {
+        {ACTIONID_JUMP_BACKWARD_EXTRASHORT, "jump-extrashort", "extrashort-jump-size", NO},
+        {ACTIONID_JUMP_FORWARD_EXTRASHORT, "jump+extrashort", "extrashort-jump-size", NO},
+        {ACTIONID_JUMP_BACKWARD_SHORT, "jump-short", "short-jump-size", NO},
+        {ACTIONID_JUMP_FORWARD_SHORT, "jump+short", "short-jump-size", NO},
+        {ACTIONID_JUMP_BACKWARD_MEDIUM, "jump-medium", "medium-jump-size", NO},
+        {ACTIONID_JUMP_FORWARD_MEDIUM, "jump+medium", "medium-jump-size", NO},
+        {ACTIONID_JUMP_BACKWARD_LONG, "jump-long", "long-jump-size", NO},
+        {ACTIONID_JUMP_FORWARD_LONG, "jump+long", "long-jump-size", NO},
+        {ACTIONID_NAV_LEFT, "nav-left", "short-jump-size", YES},
+        {ACTIONID_NAV_RIGHT, "nav-right", "short-jump-size", YES},
+    };
+
+    for (size_t i = 0; i < sizeof(seeks) / sizeof(seeks[0]); ++i) {
+        if (seeks[i].action != action)
+            continue;
+
+        uint_fast32_t *configuredKeys = NULL;
+        const size_t count = vlc_actions_get_keycodes(instance, seeks[i].name, false, &configuredKeys);
+        BOOL matches = NO;
+        for (size_t keyIndex = 0; keyIndex < count; ++keyIndex) {
+            if (configuredKeys[keyIndex] == keycode) {
+                matches = YES;
+                break;
+            }
+        }
+        free(configuredKeys);
+        if (!matches || var_InheritInteger(instance, seeks[i].interval) <= 0)
+            return;
+
+        VLCPlayerController * const player = VLCMain.sharedInstance.playQueueController.playerController;
+        if (!player.seekable || (player.playerState != VLC_PLAYER_STATE_PLAYING &&
+                                player.playerState != VLC_PLAYER_STATE_PAUSED))
+            return;
+
+        if (seeks[i].navigation) {
+            const struct vlc_player_title * const title = player.selectedTitle;
+            if (title && (title->flags & (VLC_PLAYER_TITLE_MENU | VLC_PLAYER_TITLE_INTERACTIVE)))
+                return;
+
+            // Navigation keys rotate 360-degree video instead of seeking.
+            BOOL changesViewpoint = NO;
+            for (NSValue *output in player.allVideoOutputThreads) {
+                vout_thread_t * const vout = output.pointerValue;
+                changesViewpoint |= var_GetBool(vout, "viewpoint-changeable");
+                vout_Release(vout);
+            }
+            if (changesViewpoint)
+                return;
+        }
+
+        [player displaySeekFeedback];
+        return;
+    }
 }
 
 @end
