@@ -238,7 +238,7 @@ with no client-side decoration.</string>
               <number>0</number>
              </property>
              <item row="1" column="2" colspan="2">
-              <widget class="QCheckBox" name="resizingBox">
+              <widget class="PreferenceToggle" name="resizingBox">
                <property name="text">
                 <string>Resize interface to video size</string>
                </property>
@@ -274,14 +274,14 @@ with no client-side decoration.</string>
               </spacer>
              </item>
              <item row="5" column="2">
-              <widget class="QCheckBox" name="titleBarCheckBox">
+              <widget class="PreferenceToggle" name="titleBarCheckBox">
                <property name="text">
                 <string>Enable window titlebar</string>
                </property>
               </widget>
              </item>
              <item row="1" column="0">
-              <widget class="QCheckBox" name="embedVideo">
+              <widget class="PreferenceToggle" name="embedVideo">
                <property name="text">
                 <string>Integrate video in interface</string>
                </property>
@@ -301,7 +301,7 @@ with no client-side decoration.</string>
               </widget>
              </item>
              <item row="4" column="0" colspan="2">
-              <widget class="QCheckBox" name="systrayBox">
+              <widget class="PreferenceToggle" name="systrayBox">
                <property name="text">
                 <string>Show systray icon</string>
                </property>
@@ -344,7 +344,7 @@ with no client-side decoration.</string>
               </widget>
              </item>
              <item row="3" column="0">
-              <widget class="QCheckBox" name="minimalviewBox">
+              <widget class="PreferenceToggle" name="minimalviewBox">
                <property name="text">
                 <string>Start in minimal view mode</string>
                </property>
@@ -374,7 +374,7 @@ with no client-side decoration.</string>
               </widget>
              </item>
              <item row="3" column="2" colspan="2">
-              <widget class="QCheckBox" name="pauseMinimizedBox">
+              <widget class="PreferenceToggle" name="pauseMinimizedBox">
                <property name="text">
                 <string>Pause playback when minimized</string>
                </property>
@@ -391,14 +391,14 @@ with no client-side decoration.</string>
               </widget>
              </item>
              <item row="4" column="2">
-              <widget class="QCheckBox" name="menuBarCheck">
+              <widget class="PreferenceToggle" name="menuBarCheck">
                <property name="text">
                 <string>Show the menu bar</string>
                </property>
               </widget>
              </item>
              <item row="0" column="0" colspan="5">
-              <widget class="QCheckBox" name="fsController">
+              <widget class="PreferenceToggle" name="fsController">
                <property name="text">
                 <string>Show controls in full screen mode</string>
                </property>
@@ -408,7 +408,7 @@ with no client-side decoration.</string>
               <widget class="QComboBox" name="colorSchemeComboBox"/>
              </item>
              <item row="5" column="0" colspan="2">
-              <widget class="QCheckBox" name="pinVideoControlsCheckbox">
+              <widget class="PreferenceToggle" name="pinVideoControlsCheckbox">
                <property name="toolTip">
                 <string>Disables autohiding of controls when playing videos</string>
                </property>
@@ -548,35 +548,35 @@ with no client-side decoration.</string>
        </widget>
       </item>
       <item row="2" column="0">
-       <widget class="QCheckBox" name="treePlaylist">
+       <widget class="PreferenceToggle" name="treePlaylist">
         <property name="text">
          <string>Display play queue tree</string>
         </property>
        </widget>
       </item>
       <item row="0" column="0">
-       <widget class="QCheckBox" name="OneInterfaceMode">
+       <widget class="PreferenceToggle" name="OneInterfaceMode">
         <property name="text">
          <string>Allow only one instance</string>
         </property>
        </widget>
       </item>
       <item row="1" column="0" colspan="2">
-       <widget class="QCheckBox" name="oneInstanceFromFile">
+       <widget class="PreferenceToggle" name="oneInstanceFromFile">
         <property name="text">
          <string>Use only one instance when started from file manager</string>
         </property>
        </widget>
       </item>
       <item row="0" column="1">
-       <widget class="QCheckBox" name="EnqueueOneInterfaceMode">
+       <widget class="PreferenceToggle" name="EnqueueOneInterfaceMode">
         <property name="text">
          <string>Enqueue items into play queue in one instance mode</string>
         </property>
        </widget>
       </item>
       <item row="2" column="1">
-       <widget class="QCheckBox" name="playPauseBox">
+       <widget class="PreferenceToggle" name="playPauseBox">
         <property name="text">
          <string>Pause on the last frame of a video</string>
         </property>
@@ -615,7 +615,7 @@ with no client-side decoration.</string>
        </widget>
       </item>
       <item row="1" column="0">
-       <widget class="QCheckBox" name="saveRecentlyPlayed">
+       <widget class="PreferenceToggle" name="saveRecentlyPlayed">
         <property name="text">
          <string>Save recently played items</string>
         </property>
@@ -629,7 +629,7 @@ with no client-side decoration.</string>
        </widget>
       </item>
       <item row="2" column="0">
-       <widget class="QCheckBox" name="MetadataNetworkAccessMode">
+       <widget class="PreferenceToggle" name="MetadataNetworkAccessMode">
         <property name="text">
          <string>Allow metadata network access</string>
         </property>
@@ -649,7 +649,7 @@ with no client-side decoration.</string>
        </spacer>
       </item>
       <item row="0" column="0">
-       <widget class="QCheckBox" name="updatesBox">
+       <widget class="PreferenceToggle" name="updatesBox">
         <property name="text">
          <string>Activate updates notifier</string>
         </property>
@@ -775,6 +775,13 @@ with no client-side decoration.</string>
   <tabstop>MetadataNetworkAccessMode</tabstop>
   <tabstop>assoButton</tabstop>
  </tabstops>
+ <customwidgets>
+  <customwidget>
+   <class>PreferenceToggle</class>
+   <extends>QCheckBox</extends>
+   <header>dialogs/preferences/preferences_widgets.hpp</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

@@ -46,6 +46,7 @@
 {
     NSMutableString *tempString = [[NSMutableString alloc] init];
     NSString *keyString = [theEvent characters];
+    if (keyString.length == 0) return NO;
 
     unichar key = [keyString characterAtIndex:0];
     NSUInteger i_modifiers = [theEvent modifierFlags];
@@ -124,7 +125,7 @@
     else
         return NO;
 
-    return [VLCMain.sharedInstance.simplePreferences changeHotkeyTo: tempString];
+    return self.hotkeyChangeDelegate ? [self.hotkeyChangeDelegate changeHotkeyTo:tempString] : [VLCMain.sharedInstance.simplePreferences changeHotkeyTo:tempString];
 }
 
 @end

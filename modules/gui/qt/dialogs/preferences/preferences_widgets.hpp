@@ -37,12 +37,14 @@
 #include <QDialog>
 #include <QSet>
 #include <QContextMenuEvent>
+#include <QCheckBox>
 
 class QWidget;
 class QTreeWidget;
 class QGroupBox;
 class QGridLayout;
 class QBoxLayout;
+class QHBoxLayout;
 class SearchLineEdit;
 class QDoubleSpinBox;
 class QCheckBox;
@@ -54,6 +56,24 @@ class QFontComboBox;
 class QSlider;
 class QAbstractButton;
 class WheelToVLCConverter;
+
+QString formatTooltip( const QString & );
+void showPreferenceHelp( QWidget *, const QString & );
+QWidget *createAccentColorSelector( QWidget *, QLineEdit *, int iconSize = 32 );
+
+// The switch dimensions and ON/OFF text come from Figma component 536:1014.
+// QCheckBox continues to own keyboard, accessibility and checked-state behavior.
+class PreferenceToggle final : public QCheckBox
+{
+public:
+    explicit PreferenceToggle( QWidget *parent = nullptr );
+    PreferenceToggle( const QString &text, QWidget *parent = nullptr );
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
+protected:
+    void paintEvent( QPaintEvent * ) override;
+    bool hitButton( const QPoint &point ) const override;
+};
 
 /*******************************************************
  * Simple widgets
@@ -82,7 +102,7 @@ class ConfigControl : public QObject
     Q_OBJECT
 public:
     int getType() const { return (p_item) ? p_item->i_type : -1; }
-    const char * getName() const { return  p_item->psz_name; }
+    const char * getName() const { return p_item ? p_item->psz_name : nullptr; }
     void hide() { changeVisibility( false ); }
     void show() { changeVisibility( true ); }
     /* ConfigControl factory */
@@ -145,6 +165,17 @@ public:
     IntegerRangeConfigControl( module_config_t *, QLabel*, QSlider* );
 private:
     void finish();
+};
+
+// Percentage presentation of an existing byte opacity option; the saved value
+// remains the original integer range. One decimal retains every byte value.
+class OpacityConfigControl final : public VIntConfigControl
+{
+public:
+    OpacityConfigControl( module_config_t *, QLabel *, QDoubleSpinBox * );
+    int getValue() const override;
+private:
+    QDoubleSpinBox *m_spin;
 };
 
 class IntegerRangeSliderConfigControl : public VIntConfigControl
@@ -424,6 +455,11 @@ public:
     void insertInto( QGridLayout*, int row = 0 ) override;
     void doApply() override;
     void storeValue() override {}
+    void setEditorVisible( bool );
+    void moveSearchTo(QHBoxLayout *);
+    bool matchesDefaults() const;
+    void copyKeysFrom( const KeySelectorControl & );
+    void resetAllKeys();
     enum ColumnIndex
     {
         ACTION_COL = 0,
@@ -454,10 +490,11 @@ private:
     void finish();
     QLabel *label;
     QLabel *searchLabel;
-    SearchLineEdit *actionSearch;
+    QLineEdit *actionSearch;
     QComboBox *searchOption;
     QLabel *searchOptionLabel;
     QTreeWidget *table;
+    QWidget *m_editor = nullptr;
     QSet<QString> existingkeys;
 
 private slots:

@@ -58,6 +58,7 @@
 #import <vlc_plugin.h>
 
 #import "extensions/NSString+Helpers.h"
+#import "extensions/NSView+VLCAdditions.h"
 #import "main/VLCMain.h"
 #import "preferences/prefs.h"
 #import "preferences/VLCSimplePrefsController.h"
@@ -191,7 +192,9 @@ enum VLCTreeBranchType {
     [_resetButton setTitle: _NS("Reset All")];
     [_showBasicButton setTitle: _NS("Show Basic")];
 
-    [_prefsView setBorderType: NSGrooveBorder];
+    _tree.rowHeight = 28.;
+    _tree.indentationPerLevel = 12.;
+    [_prefsView setBorderType: NSNoBorder];
     [_prefsView setHasVerticalScroller: YES];
     [_prefsView setDrawsBackground: NO];
     [_prefsView setDocumentView: o_emptyView];
@@ -398,6 +401,7 @@ enum VLCTreeBranchType {
     frame = [view frame];
     frame.size.height = i_yPos;
     [view setFrame:frame];
+    [view vlc_applyRedesignStyle];
     [prefsView setDocumentView:view];
 }
 

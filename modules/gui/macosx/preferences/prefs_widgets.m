@@ -45,6 +45,7 @@
 #import "main/VLCMain.h"
 
 #import "views/VLCUIUnits.h"
+#import "views/VLCRedesignBooleanControl.h"
 
 NSString * const VLCPrefsWidgetModuleDragType = @"VLC media player module";
 
@@ -1656,7 +1657,7 @@ my_width, tooltip, init_value)                                              \
 
     NSRect mainFrame = [parentView frame];
     NSString *labelString, *toolTip;
-    mainFrame.size.height = 17;
+    mainFrame.size.height = 32;
     mainFrame.size.width = mainFrame.size.width - leftMargin - rightMargin;
     mainFrame.origin.x = leftMargin;
     mainFrame.origin.y = 0;
@@ -1671,9 +1672,12 @@ my_width, tooltip, init_value)                                              \
         toolTip = [NSTR(p_item->psz_longtext) stringWrappedToWidth:PREFS_WRAP];
 
         /* add the checkbox */
-        ADD_CHECKBOX(o_checkbox, mainFrame, 0,
-                     0, labelString, toolTip, (int)p_item->value.i, NSImageLeft)
-        [o_checkbox setAutoresizingMask:NSViewNotSizable];
+        o_checkbox = [[VLCRedesignBooleanControl alloc] initWithFrame:NSMakeRect(0, 0, mainFrame.size.width, 32)];
+        [o_checkbox setButtonType:NSButtonTypeSwitch];
+        o_checkbox.title = labelString;
+        o_checkbox.toolTip = toolTip;
+        o_checkbox.intValue = p_item->value.i;
+        [o_checkbox setAutoresizingMask:NSViewWidthSizable];
         [self addSubview: o_checkbox];
     }
     return self;
@@ -1899,16 +1903,18 @@ o_moduleenabled = [NSNumber numberWithBool:NO];\
     return strdup([[o_textfield stringValue] UTF8String]);
 }
 
-/* FIXME:
- * This is supposed to load the module list state from preferences
- * and set the table items state (selected or unselected) accordingly,
- * as far as I could figure out by reading the commit in which this was
- * introduced. (d66f3c874786e9dd4692f9775bdd54b386c583dd)
- */
 -(void)resetValues
 {
-#warning Reset prefs of the module selector is broken atm.
-    msg_Err(getIntf(), "don't forget about modulelistconfig");
+    // Inline and full preferences both restore the actual saved chain on Cancel/reopen.
+    char *value = config_GetPsz(self.p_item->psz_name);
+    NSString *chain = toNSStr(value);
+    free(value);
+    o_textfield.stringValue = chain;
+    NSMutableSet *selected = [NSMutableSet set];
+    for (NSString *entry in [chain componentsSeparatedByString:@":"])
+        [selected addObject:[[entry componentsSeparatedByString:@"{"] firstObject]];
+    for (NSMutableArray *module in o_modulearray) module[2] = @([selected containsObject:module[0]]);
+    [o_tableview reloadData];
     [super resetValues];
 }
 

@@ -25,6 +25,7 @@
 
 #include "widgets/native/qvlcframe.hpp"
 #include "dialogs/preferences/simple_preferences.hpp"
+#include <QJsonArray>
 
 class ExpertPrefsTable;
 class PrefsTree;
@@ -36,15 +37,23 @@ class QRadioButton;
 class QWidget;
 class QCheckBox;
 class SearchLineEdit;
+class QLineEdit;
 class QStackedWidget;
 class QSplitter;
+class QToolButton;
+class PluginDialog;
+class QListWidget;
+class QTableWidget;
 
 class PrefsDialog : public QVLCDialog
 {
     Q_OBJECT
 public:
-    PrefsDialog( QWindow *, qt_intf_t * );
+    PrefsDialog( QWindow *, qt_intf_t *, bool hotkeysOnly = false );
     virtual ~PrefsDialog();
+
+protected:
+    bool eventFilter( QObject *, QEvent * ) override;
 
 private:
     size_t count;
@@ -57,6 +66,20 @@ private:
     enum { SIMPLE, ADVANCED, EXPERT };
     QGroupBox *types;
     QRadioButton *simple, *all, *expert;
+    QLineEdit *settings_search;
+    QLabel *m_headerTitle;
+    QLabel *help_description;
+    QLabel *no_results;
+    bool m_hotkeysOnly;
+    int m_currentGroup = SPrefsGroupGeneral;
+    QWidget *m_extensionsWidget = nullptr;
+    std::unique_ptr<PluginDialog> m_extensionsManager;
+    QList<ConfigControl *> m_extensionsControls;
+    QPushButton *m_groupAdvanced;
+
+    void installHelp( QWidget * );
+    void updateHelp( QWidget * );
+    SPrefsPanel *ensureSimplePanel( int );
 
     /* Simple view components */
     QWidget *simple_split_widget;
@@ -80,7 +103,6 @@ private:
     QCheckBox *expert_table_filter_modified;
     ExpertPrefsTable *expert_table;
     QLabel *expert_text;
-    QLabel *expert_longtext;
 
 private slots:
     void setExpert();
@@ -94,11 +116,47 @@ private slots:
     void expertTableFilterChanged( const QString & );
     void expertTableFilterModifiedToggled( bool );
     void onlyLoadedToggled();
+    void searchSettings( const QString & );
+    void showGroupAdvanced();
 
     void save();
     void cancel();
     void reset();
     void close() { save(); }
+};
+
+/** User-created snapshots of the original configuration and Qt GUI layout.
+ * Selecting and inspecting a profile never writes settings; Apply is explicit. */
+class SettingsProfilesDialog : public QVLCDialog
+{
+    Q_OBJECT
+public:
+    SettingsProfilesDialog(QWindow *, qt_intf_t *, const QString &selectedId = QString());
+    static QVariantList profiles(qt_intf_t *);
+    static QString currentProfile(qt_intf_t *);
+    static bool updateCurrent(qt_intf_t *);
+    void selectProfile(const QString &);
+    void newProfile();
+signals:
+    void profilesChanged();
+    void aboutToApply();
+private:
+    QJsonArray m_profiles;
+    QString m_current;
+    QListWidget *m_list;
+    QTableWidget *m_values;
+    QLineEdit *m_search;
+    QPushButton *m_save;
+    QPushButton *m_apply;
+    QPushButton *m_delete;
+    void refreshList(const QString &selectedId);
+    void reviewProfile();
+    void filterValues();
+    void saveProfile();
+    void applyProfile();
+    void deleteProfile();
+    bool persist();
+    void reportSaveError();
 };
 
 #endif

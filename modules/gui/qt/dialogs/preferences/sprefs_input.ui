@@ -160,7 +160,7 @@
        <widget class="QLineEdit" name="levelBox"/>
       </item>
       <item row="5" column="0">
-       <widget class="QCheckBox" name="fastSeekBox">
+       <widget class="PreferenceToggle" name="fastSeekBox">
         <property name="text">
          <string>Fast seek</string>
         </property>
@@ -264,7 +264,7 @@
        </widget>
       </item>
       <item row="3" column="0" colspan="2">
-       <widget class="QCheckBox" name="mkvPreloadBox">
+       <widget class="PreferenceToggle" name="mkvPreloadBox">
         <property name="text">
          <string>Preload MKV files in the same directory</string>
         </property>
@@ -394,6 +394,13 @@
   <tabstop>live555TransportHTTPRadio</tabstop>
   <tabstop>live555TransportRTSP_TCPRadio</tabstop>
  </tabstops>
+ <customwidgets>
+  <customwidget>
+   <class>PreferenceToggle</class>
+   <extends>QCheckBox</extends>
+   <header>dialogs/preferences/preferences_widgets.hpp</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

@@ -42,6 +42,8 @@
 #include <QTreeWidget>
 #include <QStringList>
 #include <QTabWidget>
+#include <QTabBar>
+#include <QListWidget>
 #include <QHeaderView>
 #include <QDialogButtonBox>
 #include <QLineEdit>
@@ -82,6 +84,8 @@ PluginDialog::PluginDialog( qt_intf_t *_p_intf ) : QVLCFrame( _p_intf )
     setWindowRole( "vlc-plugins" );
 
     QVBoxLayout *layout = new QVBoxLayout( this );
+    layout->setContentsMargins( 20, 16, 20, 16 );
+    layout->setSpacing( 16 );
     tabs = new QTabWidget( this );
     tabs->addTab( addonsTab = new AddonsTab( p_intf ),
                   qtr( "Addons Manager" ) );
@@ -89,14 +93,33 @@ PluginDialog::PluginDialog( qt_intf_t *_p_intf ) : QVLCFrame( _p_intf )
                   qtr( "Active Extensions" ) );
     tabs->addTab( pluginTab = new PluginTab( p_intf ),
                   qtr( "Plugins" ) );
-    layout->addWidget( tabs );
+    auto navigation = new QListWidget( this );
+    navigation->setObjectName( QStringLiteral("dialogNavigation") );
+    navigation->setMinimumWidth( 176 );
+    navigation->setMaximumWidth( 220 );
+    navigation->setFrameShape( QFrame::NoFrame );
+    for( int i = 0; i < tabs->count(); ++i )
+    {
+        auto item = new QListWidgetItem( tabs->tabText(i), navigation );
+        item->setSizeHint( QSize(0, 44) );
+    }
+    auto content = new QHBoxLayout;
+    content->setSpacing( 20 );
+    content->addWidget( navigation );
+    content->addWidget( tabs, 1 );
+    layout->addLayout( content, 1 );
+    tabs->tabBar()->hide();
+    navigation->setCurrentRow( tabs->currentIndex() );
+    connect( navigation, &QListWidget::currentRowChanged, tabs, &QTabWidget::setCurrentIndex );
+    connect( tabs, &QTabWidget::currentChanged, navigation,
+             QOverload<int>::of(&QListWidget::setCurrentRow) );
 
     QDialogButtonBox *box = new QDialogButtonBox;
     QPushButton *okButton = new QPushButton( qtr( "&Close" ), this );
     box->addButton( okButton, QDialogButtonBox::RejectRole );
     layout->addWidget( box );
     BUTTONACT( okButton, &PluginDialog::close );
-    restoreWidgetPosition( "PluginsDialog", QSize( 435, 280 ) );
+    restoreWidgetPosition( "PluginsDialog", QSize( 860, 560 ) );
 }
 
 PluginDialog::~PluginDialog()
@@ -105,6 +128,14 @@ PluginDialog::~PluginDialog()
     delete extensionTab;
     delete addonsTab;
     saveWidgetPosition( "PluginsDialog" );
+}
+
+void PluginDialog::showTab( int tab )
+{
+    tabs->setCurrentIndex( tab );
+    show();
+    raise();
+    activateWindow();
 }
 
 /* Plugins tab */
@@ -305,7 +336,7 @@ void ExtensionTab::moreInformation()
 }
 
 /* Add-ons tab */
-AddonsTab::AddonsTab( qt_intf_t *p_intf_ ) : QVLCFrame( p_intf_ )
+AddonsTab::AddonsTab( qt_intf_t *p_intf_, bool compact ) : QVLCFrame( p_intf_ )
 {
     b_localdone = false;
     QSplitter *splitter = new QSplitter( this );
@@ -342,6 +373,7 @@ AddonsTab::AddonsTab( qt_intf_t *p_intf_ ) : QVLCFrame( p_intf_ )
         QString iconpath = QQmlFile::urlToLocalFileOrQrc(AddonsModel::getIconForType( type ));
         button->setIcon( QIcon{ iconpath } );
         button->setText( label );
+        button->setProperty( "addonType", static_cast<int>(type) );
         button->setToolTip( ltooltip );
         button->setToolButtonStyle( Qt::ToolButtonTextBesideIcon );
         button->setIconSize( QSize( 32, 32 ) );
@@ -474,6 +506,29 @@ AddonsTab::AddonsTab( qt_intf_t *p_intf_ ) : QVLCFrame( p_intf_ )
     connect( spinnerAnimation, &PixmapAnimator::pixmapReady,
              addonsView->viewport(), QOverload<>::of(&QWidget::update) );
     addonsView->viewport()->installEventFilter( this );
+
+    if( compact )
+    {
+        // Reuse the manager's source labels, filters, search and explicit online
+        // action in Figma's inline settings presentation (6575:17137).
+        auto filters = new QHBoxLayout;
+        auto categories = new QComboBox( rightPane );
+        for( auto category : leftPane->findChildren<QToolButton *>() )
+            categories->addItem( category->text(), category->property("addonType") );
+        connect( categories, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                 m_model.get(), [model = m_model.get(), categories](int index) {
+            model->setTypeFilter( static_cast<AddonsModel::Type>(categories->itemData(index).toInt()) );
+        } );
+        searchInput->setParent( rightPane );
+        switchStack->setParent( rightPane );
+        filters->addWidget( searchInput, 1 );
+        filters->addWidget( categories );
+        filters->addWidget( switchStack, 1 );
+        layout->addLayout( filters );
+        delete leftPane;
+        this->layout()->setContentsMargins( 0, 0, 0, 0 );
+        setMinimumHeight( 280 );
+    }
 
     //model expect QMLlike behavior
     m_model->componentComplete();

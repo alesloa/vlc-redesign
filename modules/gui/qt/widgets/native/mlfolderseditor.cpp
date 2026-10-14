@@ -39,7 +39,8 @@ MLFoldersEditor::MLFoldersEditor(QWidget *parent)
     setHorizontalHeaderLabels({ qtr("Path"), qtr("Remove"), qtr("Reload") });
     horizontalHeader()->setMinimumSectionSize( 100 );
     horizontalHeader()->setSectionResizeMode( 0 , QHeaderView::Stretch );
-    horizontalHeader()->setFixedHeight( 24 );
+    // Leave room for the shared theme's 8px vertical header padding and text.
+    horizontalHeader()->setFixedHeight( qMax(32, horizontalHeader()->fontMetrics().height() + 16) );
 }
 
 void MLFoldersEditor::setMLFoldersModel(MLFoldersBaseModel *foldersModel)
@@ -137,6 +138,9 @@ void MLFoldersEditor::newRow(const QUrl &mrl)
 {
     const int row = rowCount();
     setRowCount(row + 1);
+    // The shared item style reserves 6px above/below the cell widget; its
+    // layout also reserves 4px above/below the complete action button.
+    setRowHeight(row, qMax(28, fontMetrics().height() + 8) + 20);
 
     const QString text = urlToDisplayString(mrl);
     auto col1 = new QTableWidgetItem( text );
@@ -149,12 +153,15 @@ void MLFoldersEditor::newRow(const QUrl &mrl)
     {
         QWidget *wid = new QWidget( this );
         QBoxLayout* layout = new QBoxLayout( QBoxLayout::LeftToRight , wid );
+        layout->setContentsMargins(4, 4, 4, 4);
 
         QPushButton *pb = new QPushButton( icon , wid );
-        pb->setFixedSize( 18 , 18 );
+        const int buttonSize = qMax(28, pb->fontMetrics().height() + 8);
+        pb->setFixedSize(buttonSize, buttonSize);
+        pb->setStyleSheet(QStringLiteral("padding: 0;"));
         pb->setAccessibleName(accessibleName);
 
-        layout->addWidget( pb , Qt::AlignCenter );
+        layout->addWidget( pb, 0, Qt::AlignCenter );
         wid->setLayout( layout );
         connect( pb, &QPushButton::clicked, this, [this, col1, action]()
         {

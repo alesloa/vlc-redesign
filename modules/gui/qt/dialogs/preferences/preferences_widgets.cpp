@@ -65,9 +65,217 @@
 #include <QClipboard>
 #include <QFont>
 #include <QToolButton>
+#include <QFrame>
+#include <QScrollArea>
+#include <QScreen>
+#include <QHideEvent>
+#include <QStyle>
+#include <QPainter>
+#include <QStyledItemDelegate>
+#include <QHeaderView>
+#include <QMouseEvent>
+#include <QPersistentModelIndex>
+#include <QTimer>
 
 #define MINWIDTH_BOX 90
 #define LAST_COLUMN 10
+
+namespace {
+class PreferenceHelpPopup final : public QFrame
+{
+public:
+    PreferenceHelpPopup( QWidget *anchor, const QString &text ) : QFrame(anchor, Qt::Popup)
+    {
+        setObjectName( QStringLiteral("preferenceHelpPopup") );
+        setAttribute( Qt::WA_DeleteOnClose );
+        auto layout = new QVBoxLayout( this );
+        layout->setContentsMargins( 16, 12, 16, 12 );
+        auto content = new QLabel( text, this );
+        content->setWordWrap( true );
+        content->setTextFormat( Qt::RichText );
+        content->setTextInteractionFlags( Qt::TextSelectableByMouse );
+        auto scroll = new QScrollArea( this );
+        scroll->setFrameShape( QFrame::NoFrame );
+        scroll->setWidgetResizable( true );
+        scroll->setWidget( content );
+        const QRect available = anchor->screen()->availableGeometry();
+        const int width = qMin(480, available.width() - 32);
+        const int height = qMin(480, available.height() - 32);
+        content->setMinimumWidth( qMax(120, width - 48) );
+        scroll->setMinimumHeight( qMin(height - 24, content->heightForWidth(width - 48) + 8) );
+        setMaximumSize( width, height );
+        layout->addWidget( scroll );
+    }
+protected:
+    void keyPressEvent( QKeyEvent *event ) override
+    {
+        if( event->key() == Qt::Key_Escape ) close();
+        else QFrame::keyPressEvent( event );
+    }
+    void hideEvent( QHideEvent *event ) override
+    {
+        QFrame::hideEvent( event );
+        deleteLater();
+    }
+};
+}
+
+void showPreferenceHelp( QWidget *anchor, const QString &text )
+{
+    // The same source metadata is shown on Qt builds with or without whatsthis.
+    auto popup = new PreferenceHelpPopup( anchor, text );
+    popup->adjustSize();
+    const QRect available = anchor->screen()->availableGeometry();
+    QPoint position = anchor->mapToGlobal( QPoint(0, anchor->height()) );
+    position.setX( qBound(available.left(), position.x(), available.right() - popup->width() + 1) );
+    position.setY( qBound(available.top(), position.y(), available.bottom() - popup->height() + 1) );
+    popup->move( position );
+    popup->show();
+}
+
+PreferenceToggle::PreferenceToggle( QWidget *parent ) : QCheckBox( parent )
+{
+    setMinimumHeight( 32 );
+    setSizePolicy( QSizePolicy::Expanding, QSizePolicy::Fixed );
+}
+
+PreferenceToggle::PreferenceToggle( const QString &text, QWidget *parent )
+    : PreferenceToggle( parent )
+{
+    setText( text );
+}
+
+QSize PreferenceToggle::sizeHint() const
+{
+    return QSize( 68 + (text().isEmpty() ? 0 : fontMetrics().horizontalAdvance(text()) + 20), 32 );
+}
+
+QSize PreferenceToggle::minimumSizeHint() const { return sizeHint(); }
+
+bool PreferenceToggle::hitButton( const QPoint &point ) const { return rect().contains( point ); }
+
+void PreferenceToggle::paintEvent( QPaintEvent * )
+{
+    QPainter painter( this );
+    painter.setRenderHint( QPainter::Antialiasing );
+    const QPalette colors = palette();
+    if( !text().isEmpty() )
+        style()->drawItemText( &painter, QRect(0, 0, qMax(0, width() - 88), height()),
+                              Qt::AlignVCenter | Qt::AlignLeft | Qt::TextShowMnemonic,
+                              colors, isEnabled(), text(), QPalette::WindowText );
+
+    const QRectF toggle( width() - 68, (height() - 32) / 2.0, 68, 32 );
+    const bool dark = colors.color(QPalette::Base).lightness() < 128;
+    QColor accent = colors.color(QPalette::Highlight);
+    if( !isEnabled() )
+        painter.setOpacity( 0.55 );
+    painter.setPen( Qt::NoPen );
+    painter.setBrush( colors.color(QPalette::Base) );
+    painter.drawRoundedRect( toggle, 6, 6 );
+    // Exact dark reference colors; other themes/accent choices derive from the palette.
+    const bool referenceAccent = dark && accent == QColor(QStringLiteral("#D37918"));
+    const QColor chamber = isChecked()
+        ? (referenceAccent ? QColor(QStringLiteral("#371F06")) : accent.darker(384))
+        : colors.color(QPalette::AlternateBase);
+    const QColor knob = isChecked()
+        ? (referenceAccent ? QColor(QStringLiteral("#AB6314")) : accent.darker(123))
+        : colors.color(QPalette::Disabled, QPalette::Text);
+    painter.setBrush( chamber );
+    painter.drawRoundedRect( QRectF(toggle.x() + (isChecked() ? 3 : 32), toggle.y() + 3, 33, 26), 3, 3 );
+    painter.setBrush( knob );
+    painter.drawRoundedRect( QRectF(toggle.x() + (isChecked() ? 39 : 3), toggle.y() + 3, 26, 26), 3, 3 );
+    QFont caption = font();
+    caption.setPixelSize( 12 );
+    painter.setFont( caption );
+    painter.setPen( isChecked() ? accent : colors.color(QPalette::WindowText) );
+    painter.drawText( QRectF(toggle.x() + (isChecked() ? 3 : 32), toggle.y(), 33, 32),
+                      Qt::AlignCenter, isChecked() ? qtr("ON") : qtr("OFF") );
+    if( hasFocus() )
+    {
+        painter.setBrush( Qt::NoBrush );
+        painter.setPen( QPen(accent, 1) );
+        painter.drawRoundedRect( toggle.adjusted(0.5, 0.5, -0.5, -0.5), 6, 6 );
+    }
+}
+
+QWidget *createAccentColorSelector( QWidget *parent, QLineEdit *value, int iconSize )
+{
+    auto selector = new QWidget( parent );
+    auto layout = new QHBoxLayout( selector );
+    layout->setContentsMargins( iconSize == 64 ? 0 : 2, iconSize == 64 ? 0 : 2,
+                               iconSize == 64 ? 0 : 2, iconSize == 64 ? 0 : 2 );
+    layout->setSpacing( iconSize == 64 ? 16 : 4 );
+    if( iconSize != 64 )
+        selector->setFixedSize( 320, 36 ); // Figma General 3046:9329.
+    // Swatches and both states are unchanged exports from Figma onboarding
+    // 1902:3670 through 1902:6465. qt-accent-color already accepts QColor values.
+    const char *colors[] = {"#D37918", "#E15032", "#C49E23", "#19A234", "#18AAD3",
+                            "#185DD3", "#8E42FF", "#F052B3", "#AFAFAF"};
+    const char *names[] = {"orange", "red", "yellow", "green", "cyan", "blue", "purple", "pink", "gray"};
+    for( int i = 0; i < 9; ++i )
+    {
+        auto button = new QToolButton( selector );
+        button->setAutoRaise( true );
+        button->setCheckable( true );
+        if( iconSize == 64 )
+        {
+            button->setFixedSize( iconSize, iconSize );
+            button->setIconSize( QSize(iconSize, iconSize) );
+        }
+        else
+        {
+            button->setFixedHeight( 32 );
+            button->setSizePolicy( QSizePolicy::Ignored, QSizePolicy::Fixed );
+            button->setIconSize( QSize(20, 20) );
+        }
+        button->setToolTip( QLatin1String(colors[i]) );
+        button->setAccessibleName( QLatin1String(colors[i]) );
+        button->setProperty( "preferenceValue", QLatin1String(colors[i]) );
+        button->setStyleSheet( QStringLiteral("QToolButton { background: transparent; border: 0; padding: 0; }") );
+        QIcon icon;
+        const QString source = QStringLiteral(":/redesign/icons/onboarding-accent-") + QLatin1String(names[i]);
+        if( iconSize == 64 )
+        {
+            icon.addPixmap( QPixmap(source + QStringLiteral(".svg")), QIcon::Normal, QIcon::Off );
+            icon.addPixmap( QPixmap(source + QStringLiteral("-active.svg")), QIcon::Normal, QIcon::On );
+        }
+        else
+        {
+            // General's swatches are native rectangles in 3046:9331–9347,
+            // rather than the exported circular onboarding assets.
+            for( bool active : {false, true} )
+            {
+                QPixmap swatch( QSize(20, 20) * selector->devicePixelRatioF() );
+                swatch.setDevicePixelRatio( selector->devicePixelRatioF() );
+                swatch.fill( Qt::transparent );
+                QPainter painter( &swatch );
+                painter.setRenderHint( QPainter::Antialiasing );
+                painter.setOpacity( active ? 1 : 0.7 );
+                painter.setPen( Qt::NoPen );
+                painter.setBrush( QColor(QLatin1String(colors[i])) );
+                painter.drawRoundedRect( QRectF(0, 0, 20, 20), 1, 1 );
+                painter.end();
+                icon.addPixmap( swatch, QIcon::Normal, active ? QIcon::On : QIcon::Off );
+            }
+            button->setStyleSheet( QStringLiteral("QToolButton { background: transparent; border: 0; padding: 6px;"
+                "border-radius: 4px; } QToolButton:checked { background: #371F06; }") );
+        }
+        button->setIcon( icon );
+        layout->addWidget( button );
+        QObject::connect( button, &QToolButton::clicked, value, [value, button]() {
+            value->setText( button->property("preferenceValue").toString() );
+            button->setChecked( true );
+        } );
+    }
+    const auto updateSelection = [selector](const QString &current) {
+        const QString color = current == QStringLiteral("default") ? QStringLiteral("#D37918") : current;
+        for( auto button : selector->findChildren<QToolButton *>() )
+            button->setChecked( !color.compare(button->property("preferenceValue").toString(), Qt::CaseInsensitive) );
+    };
+    QObject::connect( value, &QLineEdit::textChanged, selector, updateSelection );
+    updateSelection( value->text() );
+    return selector;
+}
 
 QString formatTooltip(const QString & tooltip)
 {
@@ -117,7 +325,7 @@ ConfigControl *ConfigControl::createControl( module_config_t *p_item,
         p_control = new ColorConfigControl( p_item, parent );
         break;
     case CONFIG_ITEM_INTEGER:
-        if( p_item->list_count )
+        if( p_item->list_count || !strcmp(p_item->psz_name, "sub-autodetect-fuzzy") )
             p_control = new IntegerListConfigControl( p_item, parent );
         else
             p_control = new IntegerRangeConfigControl( p_item, parent );
@@ -154,6 +362,35 @@ ConfigControl *ConfigControl::createControl( module_config_t *item,
     ConfigControl *control = createControl( item, parent );
     if ( control )
         control->insertInto( l, line );
+    if( control && item->i_type != CONFIG_ITEM_KEY )
+    {
+        // This action exposes the module's own help without waiting for a tooltip.
+        auto help = new QToolButton( parent );
+        help->setObjectName( QStringLiteral("preferenceInfo") );
+        help->setIcon( QIcon(QStringLiteral(":/redesign/icons/settings-info.svg")) );
+        help->setIconSize( QSize(18, 18) );
+        help->setAccessibleName( qtr("Help") );
+        help->setToolTip( formatTooltip( qfut(item->psz_longtext && *item->psz_longtext
+                                             ? item->psz_longtext : item->psz_text) ) );
+        help->setAutoRaise( true );
+        if( auto labelItem = l->itemAtPosition(line, 0); labelItem && labelItem->widget() )
+        {
+            auto label = labelItem->widget();
+            auto caption = new QWidget( parent );
+            delete l->replaceWidget( label, caption );
+            auto captionLayout = new QHBoxLayout( caption );
+            captionLayout->setContentsMargins( 0, 0, 0, 0 );
+            captionLayout->setSpacing( 10 );
+            captionLayout->addWidget( label );
+            captionLayout->addWidget( help );
+            captionLayout->addStretch();
+        }
+        else
+            l->addWidget( help, line, LAST_COLUMN + 1, Qt::AlignVCenter );
+        QObject::connect( help, &QToolButton::clicked, help, [help]() {
+            showPreferenceHelp( help, help->toolTip() );
+        } );
+    }
     return control;
 }
 
@@ -445,7 +682,7 @@ FontConfigControl::FontConfigControl( module_config_t *_p_item,
 void FontConfigControl::insertInto( QGridLayout *l, int line )
 {
     l->addWidget( label, line, 0 );
-    l->addWidget( font, line, 1, 1, -1 );
+    l->addWidget( font, line, 1, 1, LAST_COLUMN );
 }
 
 void FontConfigControl::insertInto( QBoxLayout *l, int index )
@@ -706,6 +943,8 @@ ModuleListConfigControl::ModuleListConfigControl( module_config_t *_p_item,
     QGridLayout *layoutGroupBox = new QGridLayout( groupBox );
 
     finish( bycat );
+    // Preserve the complete source value, including filters unavailable in this build.
+    text->setText( qfu(p_item->value.psz) );
 
     int boxline = 0;
     foreach ( checkBoxListItem *it, modules )
@@ -722,7 +961,7 @@ ModuleListConfigControl::ModuleListConfigControl( module_config_t *_p_item,
 
 void ModuleListConfigControl::insertInto( QGridLayout *l, int line )
 {
-    l->addWidget( groupBox, line, 0, 1, -1 );
+    l->addWidget( groupBox, line, 0, 1, LAST_COLUMN + 1 );
 }
 
 void ModuleListConfigControl::insertInto( QBoxLayout *l, int index )
@@ -746,7 +985,7 @@ void ModuleListConfigControl::checkbox_lists( module_t *p_parser )
 
 void ModuleListConfigControl::checkbox_lists( QString label, QString help, const char* psz_module )
 {
-    QCheckBox *cb = new QCheckBox( label );
+    QCheckBox *cb = new PreferenceToggle( label );
     checkBoxListItem *cbl = new checkBoxListItem;
 
     connect( cb, &QtCheckboxChanged, this, &ModuleListConfigControl::onUpdate );
@@ -947,6 +1186,29 @@ void IntegerRangeConfigControl::finish()
     spin->setMinimum( p_item->min.i < INT_MIN ? INT_MIN : p_item->min.i );
 }
 
+OpacityConfigControl::OpacityConfigControl( module_config_t *option, QLabel *label, QDoubleSpinBox *spin )
+    : VIntConfigControl(option), m_spin(spin)
+{
+    assert(option->min.i==0 && option->max.i==255);
+    m_spin->setObjectName(QString::fromLatin1(option->psz_name));
+    m_spin->setDecimals(1);
+    m_spin->setRange(0,100);
+    m_spin->setSingleStep(1);
+    m_spin->setSuffix(QStringLiteral("%")); // Figma opacity fields display percentages.
+    m_spin->setProperty("opacityByteMaximum",QVariant::fromValue(option->max.i));
+    m_spin->setValue(double(option->value.i)*100.0/double(option->max.i));
+    label->setBuddy(m_spin);
+    const auto help=formatTooltip(qfut(option->psz_longtext&&*option->psz_longtext
+                                      ? option->psz_longtext : option->psz_text));
+    m_spin->setToolTip(help);
+    label->setToolTip(help);
+}
+
+int OpacityConfigControl::getValue() const
+{
+    return qBound(0,qRound(m_spin->value()*double(p_item->max.i)/100.0),int(p_item->max.i));
+}
+
 IntegerRangeSliderConfigControl::IntegerRangeSliderConfigControl(
                                             module_config_t *_p_item,
                                             QLabel *_label, QSlider *_slider ) :
@@ -1026,19 +1288,42 @@ void IntegerListConfigControl::finish( module_config_t *p_module_config )
 
     if(!p_module_config) return;
 
-    int64_t *values;
-    char **texts;
-    ssize_t count = config_GetIntChoices( p_module_config->psz_name,
-                                          &values, &texts );
-    for( ssize_t i = 0; i < count; i++ )
+    if( !strcmp(p_module_config->psz_name, "sub-autodetect-fuzzy") )
     {
-        combo->addItem( qfut(texts[i]), qlonglong(values[i]) );
-        if( p_module_config->value.i == values[i] )
+        // Names and numeric mappings come from SUB_FUZZY_LONGTEXT in src/libvlc-module.c.
+        const char *choices[] = {N_("no subtitles autodetected"), N_("any subtitle file"),
+            N_("any subtitle file containing the movie name"),
+            N_("subtitle file matching the movie name with additional chars"),
+            N_("subtitle file matching the movie name exactly")};
+        for( int i = 0; i < 5; ++i )
+            combo->addItem( qfut(choices[i]), i );
+        const int current = combo->findData( qlonglong(p_item->value.i) );
+        if( current == -1 )
+        {
+            // Preserve any manually configured value instead of silently normalizing it.
+            combo->addItem( QString::number(p_item->value.i),
+                            qlonglong(p_item->value.i) );
             combo->setCurrentIndex( combo->count() - 1 );
-        free( texts[i] );
+        }
+        else
+            combo->setCurrentIndex( current );
     }
-    free( texts );
-    free( values );
+    else
+    {
+        int64_t *values;
+        char **texts;
+        ssize_t count = config_GetIntChoices( p_module_config->psz_name,
+                                              &values, &texts );
+        for( ssize_t i = 0; i < count; i++ )
+        {
+            combo->addItem( qfut(texts[i]), qlonglong(values[i]) );
+            if( p_module_config->value.i == values[i] )
+                combo->setCurrentIndex( combo->count() - 1 );
+            free( texts[i] );
+        }
+        free( texts );
+        free( values );
+    }
     if( p_item->psz_longtext )
     {
         QString tipText = qfut(p_item->psz_longtext );
@@ -1065,7 +1350,7 @@ int IntegerListConfigControl::getValue() const
 BoolConfigControl::BoolConfigControl( module_config_t *_p_item, QWidget *p ) :
     VIntConfigControl( _p_item )
 {
-    checkbox = new QCheckBox( qfut(p_item->psz_text), p );
+    checkbox = new PreferenceToggle( qfut(p_item->psz_text), p );
     finish();
 }
 
@@ -1081,7 +1366,14 @@ BoolConfigControl::BoolConfigControl( module_config_t *_p_item,
 
 void BoolConfigControl::insertInto( QGridLayout *l, int line )
 {
-    l->addWidget( checkbox, line, 0, 1, -1 );
+    auto label = new QLabel( qfut(p_item->psz_text), checkbox->parentWidget() );
+    label->setWordWrap( true );
+    label->setBuddy( checkbox );
+    checkbox->setAccessibleName( label->text() );
+    checkbox->setText( QString() );
+    checkbox->setFixedSize( 68, 32 );
+    l->addWidget( label, line, 0 );
+    l->addWidget( checkbox, line, 1, 1, LAST_COLUMN, Qt::AlignRight );
 }
 
 void BoolConfigControl::insertInto( QBoxLayout *l, int index )
@@ -1286,31 +1578,124 @@ void FloatRangeConfigControl::finish()
 /**********************************************************************
  * Key selector widget
  **********************************************************************/
+namespace {
+constexpr int HotkeyGroupRole = Qt::UserRole + 12;
+constexpr int HotkeyEditableRole = Qt::UserRole + 13;
+class HotkeyPresentation final : public QStyledItemDelegate
+{
+public:
+    explicit HotkeyPresentation( QObject *parent ) : QStyledItemDelegate(parent) {}
+    bool editorEvent( QEvent *event, QAbstractItemModel *model,
+                      const QStyleOptionViewItem &option, const QModelIndex &index ) override
+    {
+        if( event->type() == QEvent::MouseButtonRelease && index.column() != KeySelectorControl::ACTION_COL
+            && index.data(HotkeyEditableRole).toBool() )
+        {
+            auto mouse = static_cast<QMouseEvent *>(event);
+            const int headingHeight = index.siblingAtColumn(0).data(HotkeyGroupRole).toString().isEmpty() ? 0 : 48;
+            const QRect row = option.rect.adjusted(0, headingHeight, 0, 0);
+            const QRect cap( row.left(), row.top() + 7, qMin(270, row.width() - 20), 33 );
+            const QRect pencil( cap.right() - 28, cap.top() + 4, 24, 24 );
+            if( mouse->button() == Qt::LeftButton && pencil.contains(mouse->position().toPoint()) )
+                if( auto table = qobject_cast<QTreeWidget *>(parent()) )
+                {
+                    const QPersistentModelIndex selected( index );
+                    table->setCurrentIndex( index );
+                    QTimer::singleShot( 0, table, [table, selected]() {
+                        if( selected.isValid() )
+                            table->itemActivated( table->itemFromIndex(selected), selected.column() );
+                    } );
+                    return true;
+                }
+        }
+        return QStyledItemDelegate::editorEvent(event, model, option, index);
+    }
+    QSize sizeHint( const QStyleOptionViewItem &option, const QModelIndex &index ) const override
+    {
+        auto size = QStyledItemDelegate::sizeHint(option, index);
+        size.setHeight( 47 + (index.siblingAtColumn(0).data(HotkeyGroupRole).toString().isEmpty() ? 0 : 48) );
+        return size;
+    }
+    void paint( QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index ) const override
+    {
+        painter->save();
+        const auto caption = index.siblingAtColumn(0).data(HotkeyGroupRole).toString();
+        const int headingHeight = caption.isEmpty() ? 0 : 48;
+        if( headingHeight && index.column() == 0 )
+        {
+            QFont heading = option.font; heading.setPixelSize(16);
+            painter->setFont( heading );
+            painter->setPen( option.palette.color(QPalette::WindowText) );
+            painter->drawText( option.rect.adjusted(0, 0, 0, -(option.rect.height() - 28)), Qt::AlignVCenter, caption );
+        }
+        QRect row = option.rect.adjusted( 0, headingHeight, 0, 0 );
+        painter->setFont( option.font );
+        if( index.column() == KeySelectorControl::ACTION_COL )
+        {
+            painter->setPen( option.palette.color(QPalette::WindowText) );
+            painter->drawText( row.adjusted(0, 0, -16, 0), Qt::AlignVCenter,
+                              option.fontMetrics.elidedText(index.data().toString(), Qt::ElideRight, row.width() - 16) );
+        }
+        else
+        {
+            if( !index.data(HotkeyEditableRole).toBool() )
+            {
+                painter->restore();
+                return;
+            }
+            const QRect cap( row.left(), row.top() + 7, qMin(270, row.width() - 20), 33 );
+            painter->setRenderHint( QPainter::Antialiasing );
+            painter->setPen( option.state.testFlag(QStyle::State_Selected)
+                ? QPen(option.palette.color(QPalette::Highlight), 1) : QPen(Qt::NoPen) );
+            painter->setBrush( option.palette.color(QPalette::Base) );
+            painter->drawRoundedRect( cap, 4, 4 );
+            painter->setPen( option.palette.color(QPalette::BrightText) );
+            painter->drawText( cap.adjusted(12, 0, -35, 0), Qt::AlignCenter,
+                              option.fontMetrics.elidedText(index.data().toString(), Qt::ElideRight, cap.width() - 47) );
+            QIcon(QStringLiteral(":/redesign/icons/settings-keyedit.svg")).paint(
+                painter, QRect(cap.right() - 28, cap.top() + 4, 24, 24) );
+        }
+        painter->restore();
+    }
+};
+}
+
 KeySelectorControl::KeySelectorControl( QWidget *p ) : ConfigControl( nullptr )
 {
     label = new QLabel( qtr( "Action hotkey mappings." ), p );
 
     label->setWordWrap( true );
     searchLabel = new QLabel( qtr( "Search" ), p );
-    actionSearch = new SearchLineEdit();
+    actionSearch = new QLineEdit();
+    actionSearch->setClearButtonEnabled(true);
+    actionSearch->setObjectName( QStringLiteral("hotkeyEditorSearch") );
+    actionSearch->setPlaceholderText( qtr("Search Keyboard Shortcuts...") ); // Figma 2437:14832.
+    actionSearch->addAction( QIcon(QStringLiteral(":/redesign/icons/settings-search.svg")), QLineEdit::LeadingPosition );
 
     searchOptionLabel = new QLabel( qtr("in") );
     searchOption = new QComboBox();
-    searchOption->addItem( qtr("Any field"), ANY_COL );
+    searchOption->addItem( qtr("All Fields"), ANY_COL ); // Figma search scope, unchanged ANY_COL behavior.
     searchOption->addItem( qtr("Actions"), ACTION_COL );
     searchOption->addItem( qtr("Hotkeys"), HOTKEY_COL );
     searchOption->addItem( qtr("Global Hotkeys"), GLOBAL_HOTKEY_COL );
 
     table = new QTreeWidget( p );
+    table->setFrameShape(QFrame::NoFrame);
+    // The source keycaps use Base; the surrounding surface uses Window.
+    table->viewport()->setBackgroundRole(QPalette::Window);
     table->setColumnCount( ANY_COL );
     table->headerItem()->setText( ACTION_COL, qtr( "Action" ) );
     table->headerItem()->setText( HOTKEY_COL, qtr( "Hotkey" ) );
     table->headerItem()->setToolTip( HOTKEY_COL, qtr( "Application level hotkey" ) );
-    table->headerItem()->setText( GLOBAL_HOTKEY_COL, qtr( "Global" ) );
+    table->headerItem()->setText( GLOBAL_HOTKEY_COL, qtr( "Global Hotkey" ) );
     table->headerItem()->setToolTip( GLOBAL_HOTKEY_COL, qtr( "Desktop level hotkey" ) );
-    table->setAlternatingRowColors( true );
+    table->setObjectName( QStringLiteral("hotkeyEditorTable") );
+    table->setAlternatingRowColors( false );
     table->setSelectionBehavior( QAbstractItemView::SelectItems );
-    table->setStyleSheet( "QTreeView::item { padding: 5px 0; }" );
+    table->setRootIsDecorated( false );
+    table->setIndentation( 0 );
+    table->setItemDelegate( new HotkeyPresentation(table) );
+    table->setStyleSheet( QStringLiteral("QTreeView { border: 0; } QTreeView::item { padding: 0; }") );
 
     table->installEventFilter( this );
 
@@ -1322,21 +1707,79 @@ KeySelectorControl::KeySelectorControl( QWidget *p ) : ConfigControl( nullptr )
 
     finish();
 
-    connect( actionSearch, &SearchLineEdit::textChanged, this, &KeySelectorControl::filter );
+    connect( actionSearch, &QLineEdit::textChanged, this, &KeySelectorControl::filter );
     connect( searchOption, QOverload<int>::of(&QComboBox::activated),
              this, &KeySelectorControl::filter );
 }
 
 void KeySelectorControl::insertInto( QGridLayout *l, int line )
 {
-    QGridLayout *gLayout = new QGridLayout();
-    gLayout->addWidget( label, 0, 0, 1, 4 );
-    gLayout->addWidget( searchLabel, 1, 0, 1, 1 );
-    gLayout->addWidget( actionSearch, 1, 1, 1, 1 );
-    gLayout->addWidget( searchOptionLabel, 1, 2, 1, 1 );
-    gLayout->addWidget( searchOption, 1, 3, 1, 1 );
-    gLayout->addWidget( table, 2, 0, 1, 4 );
-    l->addLayout( gLayout, line, 0, 1, -1 );
+    m_editor = new QWidget( table->parentWidget() );
+    m_editor->setObjectName( QStringLiteral("hotkeyEditor") );
+    QGridLayout *gLayout = new QGridLayout( m_editor );
+    label->hide(); searchLabel->hide(); searchOptionLabel->hide();
+    gLayout->setContentsMargins( 0, 0, 0, 0 );
+    gLayout->setHorizontalSpacing( 10 );
+    gLayout->setVerticalSpacing( 20 );
+    actionSearch->setMinimumHeight( 34 );
+    searchOption->setFixedSize( 200, 34 );
+    gLayout->addWidget( actionSearch, 0, 0 );
+    gLayout->addWidget( searchOption, 0, 1 );
+    gLayout->addWidget( table, 1, 0, 1, 2 );
+    gLayout->setColumnStretch( 0, 1 );
+    gLayout->setRowStretch( 1, 1 );
+    l->addWidget( m_editor, line, 0, 1, -1 );
+}
+
+void KeySelectorControl::moveSearchTo(QHBoxLayout *layout)
+{
+    if (!m_editor || !layout) return;
+    m_editor->layout()->removeWidget(actionSearch);
+    m_editor->layout()->removeWidget(searchOption);
+    m_editor->layout()->setSpacing(0);
+    actionSearch->setFixedHeight(36);
+    searchOption->setFixedSize(200,36);
+    layout->addWidget(actionSearch,1);
+    layout->addWidget(searchOption);
+}
+
+void KeySelectorControl::setEditorVisible( bool visible )
+{
+    if( m_editor ) m_editor->setVisible( visible );
+}
+
+bool KeySelectorControl::matchesDefaults() const
+{
+    for( QTreeWidgetItemIterator iter(table); *iter; ++iter )
+    {
+        const auto item = static_cast<KeyTableItem *>(*iter);
+        if( !item->normal.matches_default || (item->global.config_name && !item->global.matches_default) ) return false;
+    }
+    return true;
+}
+
+void KeySelectorControl::copyKeysFrom( const KeySelectorControl &source )
+{
+    for( QTreeWidgetItemIterator iter(table); *iter; ++iter )
+    {
+        auto item = static_cast<KeyTableItem *>(*iter);
+        for( QTreeWidgetItemIterator other(source.table); *other; ++other )
+        {
+            const auto original = static_cast<KeyTableItem *>(*other);
+            if( !strcmp(item->normal.config_name, original->normal.config_name) )
+            {
+                item->set_keys( original->normal.keys, HOTKEY_COL );
+                item->set_keys( original->global.keys, GLOBAL_HOTKEY_COL );
+                break;
+            }
+        }
+    }
+}
+
+void KeySelectorControl::resetAllKeys()
+{
+    reset_all( HOTKEY_COL );
+    reset_all( GLOBAL_HOTKEY_COL );
 }
 
 void KeySelectorControl::buildAppHotkeysList( QWidget *rootWidget )
@@ -1383,6 +1826,9 @@ void KeySelectorControl::finish()
         treeItem->normal.default_keys = qfu( p_config_item->orig.psz );
         treeItem->global.config_name = nullptr;
         treeItem->global.default_keys = qfu( "" );
+        treeItem->global.matches_default = true;
+        treeItem->setData( HOTKEY_COL, HotkeyEditableRole, true );
+        treeItem->setData( GLOBAL_HOTKEY_COL, HotkeyEditableRole, false );
 
         treeItem->setText( ACTION_COL, qfut( p_config_item->psz_text ) );
         if (p_config_item->psz_longtext)
@@ -1404,6 +1850,7 @@ void KeySelectorControl::finish()
             if( strcmp( item->normal.config_name, global_keys[i]->psz_name + 7 ) == 0 )
             {
                 item->global.config_name = global_keys[i]->psz_name;
+                item->setData( GLOBAL_HOTKEY_COL, HotkeyEditableRole, true );
                 item->global.default_keys = qfu( global_keys[i]->orig.psz );
                 item->set_keys( global_keys[i]->value.psz, GLOBAL_HOTKEY_COL );
                 break;
@@ -1413,10 +1860,34 @@ void KeySelectorControl::finish()
 
     module_config_free (p_config);
 
-    table->resizeColumnToContents( ACTION_COL );
-    table->resizeColumnToContents( HOTKEY_COL );
+    // Reorder only the nine source actions shown in Figma's Basic/Playback sections.
+    // Every other existing action stays in its original relative order.
+    const char *firstActions[] = {"key-toggle-fullscreen", "key-leave-fullscreen", "key-position", "key-intf-show",
+        "key-play-pause", "key-stop", "key-next", "key-prev", "key-program-sid-next"};
+    QList<KeyTableItem *> ordered;
+    for( const auto name : firstActions )
+        for( int row = 0; row < table->topLevelItemCount(); ++row )
+        {
+            auto item = static_cast<KeyTableItem *>(table->topLevelItem(row));
+            if( !strcmp(item->normal.config_name, name) )
+            {
+                table->takeTopLevelItem( row );
+                ordered.append( item );
+                break;
+            }
+        }
+    for( int row = ordered.count() - 1; row >= 0; --row ) table->insertTopLevelItem(0, ordered[row]);
+    for( auto item : ordered )
+        if( !strcmp(item->normal.config_name, "key-toggle-fullscreen") ) item->setData(0, HotkeyGroupRole, qtr("Basic"));
+        else if( !strcmp(item->normal.config_name, "key-play-pause") ) item->setData(0, HotkeyGroupRole, qtr("Playback"));
 
-    table->setUniformRowHeights( true );
+    table->header()->setSectionResizeMode( ACTION_COL, QHeaderView::Stretch );
+    table->header()->setSectionResizeMode( HOTKEY_COL, QHeaderView::Fixed );
+    table->header()->setSectionResizeMode( GLOBAL_HOTKEY_COL, QHeaderView::Fixed );
+    table->header()->resizeSection( HOTKEY_COL, 300 );
+    table->header()->resizeSection( GLOBAL_HOTKEY_COL, 300 );
+
+    table->setUniformRowHeights( false );
 
     connect( table, &QTreeWidget::itemActivated,
              this, QOverload<QTreeWidgetItem *, int>::of(&KeySelectorControl::selectKey) );
@@ -1471,6 +1942,7 @@ void KeySelectorControl::selectKey( KeyTableItem *item, enum ColumnIndex column 
 
     /* If clicked on the first column, assuming user wants the normal hotkey */
     if( column == ACTION_COL ) column = HOTKEY_COL;
+    if( column == GLOBAL_HOTKEY_COL && !item->global.config_name ) return;
 
     /* Launch a small dialog to ask for a new key */
     KeyInputDialog *d = new KeyInputDialog( table, item, column );
@@ -1498,7 +1970,8 @@ void KeySelectorControl::doApply()
         KeyTableItem *item = static_cast<KeyTableItem *>( *iter );
 
         config_PutPsz( item->normal.config_name, qtu( item->normal.keys ) );
-        config_PutPsz( item->global.config_name, qtu( item->global.keys ) );
+        if( item->global.config_name )
+            config_PutPsz( item->global.config_name, qtu( item->global.keys ) );
     }
 }
 

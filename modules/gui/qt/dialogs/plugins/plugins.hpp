@@ -65,6 +65,7 @@ class PluginDialog : public QVLCFrame
 public:
     PluginDialog( qt_intf_t * );
     virtual ~PluginDialog();
+    void showTab( int );
 
 private:
     QTabWidget *tabs;
@@ -127,6 +128,7 @@ class AddonsTab : public QVLCFrame
 {
     Q_OBJECT
     friend class PluginDialog;
+    friend class PrefsDialog;
 
 protected:
     void keyPressEvent( QKeyEvent *keyEvent ) override;
@@ -137,7 +139,7 @@ private slots:
     void reposync();
 
 private:
-    AddonsTab( qt_intf_t *p_intf );
+    AddonsTab( qt_intf_t *p_intf, bool compact = false );
     virtual ~AddonsTab();
     bool eventFilter ( QObject * watched, QEvent * event ) override;
 

@@ -16,7 +16,7 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_3">
    <item>
-    <widget class="QCheckBox" name="enableVideo">
+    <widget class="PreferenceToggle" name="enableVideo">
      <property name="text">
       <string>Enable video</string>
      </property>
@@ -57,14 +57,14 @@
           </widget>
          </item>
          <item row="2" column="0">
-          <widget class="QCheckBox" name="windowDecorations">
+          <widget class="PreferenceToggle" name="windowDecorations">
            <property name="text">
             <string>Window decorations</string>
            </property>
           </widget>
          </item>
          <item row="0" column="0">
-          <widget class="QCheckBox" name="fullscreen">
+          <widget class="PreferenceToggle" name="fullscreen">
            <property name="text">
             <string>Fullscreen</string>
            </property>
@@ -100,7 +100,7 @@
         </property>
         <layout class="QGridLayout" name="gridLayout_4">
          <item row="1" column="0">
-          <widget class="QCheckBox" name="hwYUVBox">
+          <widget class="PreferenceToggle" name="hwYUVBox">
            <property name="text">
             <string>Use hardware YUV to RGB conversions</string>
            </property>
@@ -116,7 +116,7 @@
         </property>
         <layout class="QGridLayout" name="gridLayout_3">
          <item row="0" column="0">
-          <widget class="QCheckBox" name="kvaFixT23">
+          <widget class="PreferenceToggle" name="kvaFixT23">
            <property name="text">
             <string>Enable a workaround for T23</string>
            </property>
@@ -266,7 +266,7 @@
           </widget>
          </item>
          <item row="1" column="3">
-          <widget class="QCheckBox" name="snapshotsSequentialNumbering">
+          <widget class="PreferenceToggle" name="snapshotsSequentialNumbering">
            <property name="text">
             <string>Sequential numbering</string>
            </property>
@@ -324,6 +324,13 @@
   <tabstop>snapshotsSequentialNumbering</tabstop>
   <tabstop>snapshotsFormat</tabstop>
  </tabstops>
+ <customwidgets>
+  <customwidget>
+   <class>PreferenceToggle</class>
+   <extends>QCheckBox</extends>
+   <header>dialogs/preferences/preferences_widgets.hpp</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

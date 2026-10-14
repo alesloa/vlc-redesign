@@ -41,12 +41,22 @@
 #import <vlc_aout.h>
 
 #import "extensions/NSScreen+VLCAdditions.h"
+#import "extensions/NSColor+VLCAdditions.h"
+#import "extensions/NSImage+VLCAdditions.h"
+#import "extensions/NSView+VLCAdditions.h"
+#import "views/VLCUIUnits.h"
+#import "views/VLCRedesignBooleanControl.h"
 #import "extensions/NSString+Helpers.h"
 #import "extensions/NSFont+VLCAdditions.h"
 #import "main/VLCMain.h"
+#import "main/VLCApplication.h"
 #import "main/VLCMain+OldPrefs.h"
 #import "os-integration/VLCClickerManager.h"
 #import "preferences/prefs.h"
+#import "preferences/VLCInlineAdvancedPreferences.h"
+#import "preferences/VLCSimplePrefsWindow.h"
+#import "preferences/VLCSettingsProfileManager.h"
+#import "menus/VLCMainMenu.h"
 #import "library/VLCLibraryController.h"
 #import "library/VLCLibraryModel.h"
 #import "library/VLCLibraryDataTypes.h"
@@ -176,6 +186,18 @@ static NSString* VLCHotkeysSettingToolbarIdentifier = @"Hotkeys Settings Item Id
     NSString *_keyInTransition;
     VLCMediaLibraryFolderManagementController *_mediaLibraryManagementController;
 
+    NSArray<NSButton *> *_categoryButtons;
+    NSArray<NSView *> *_categoryViews;
+    VLCInlineAdvancedPreferences *_inlineAdvancedPreferences;
+    NSMapTable<NSButton *, NSView *> *_sourceHelpSections;
+    NSView *_privacyCategoryView;
+    NSSearchField *_settingsSearchField;
+    NSArray<NSString *> *_categoryIconNames;
+    NSInteger _appearanceBeforeEditing;
+    NSInteger _accentBeforeEditing;
+    NSSegmentedControl *_generalAppearanceControl;
+    NSArray<NSButton *> *_generalAccentButtons;
+    NSButton *_settingsProfileButton;
     intf_thread_t *p_intf;
 }
 @end
@@ -234,6 +256,532 @@ static NSString* VLCHotkeysSettingToolbarIdentifier = @"Hotkeys Settings Item Id
     [clipView addConstraints:constraints];
 
     [self setupMediaLibraryControlInterface];
+    [self setupCategorySidebar];
+}
+
+- (NSView *)settingsViewWithSections:(NSArray<NSView *> *)sections
+{
+    NSView *view = [[NSView alloc] init];
+    view.translatesAutoresizingMaskIntoConstraints = NO;
+    NSStackView *stack = [[NSStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.orientation = NSUserInterfaceLayoutOrientationVertical;
+    stack.alignment = NSLayoutAttributeLeading;
+    stack.spacing = VLCUIUnits.largeSpacing;
+    [view addSubview:stack];
+    [NSLayoutConstraint activateConstraints:@[
+        [stack.leadingAnchor constraintEqualToAnchor:view.leadingAnchor constant:20.],
+        [stack.trailingAnchor constraintEqualToAnchor:view.trailingAnchor constant:-20.],
+        [stack.topAnchor constraintEqualToAnchor:view.topAnchor constant:20.],
+        [stack.bottomAnchor constraintEqualToAnchor:view.bottomAnchor constant:-20.]
+    ]];
+    for (__strong NSView *section in sections) {
+        // Retain each section's source XIB height and all of its existing controls/bindings.
+        CGFloat height = MAX(section.frame.size.height, 24.);
+        if ([section isKindOfClass:VLCRedesignBooleanControl.class]) height = 44;
+        if ([section isKindOfClass:NSBox.class]) height = [self reflowBasicSettingsBox:(NSBox *)section];
+        [section removeFromSuperview];
+        if ([section isKindOfClass:VLCRedesignBooleanControl.class]) {
+            NSStackView *row = [[NSStackView alloc] init]; row.spacing = 12; row.alignment = NSLayoutAttributeCenterY;
+            section.translatesAutoresizingMaskIntoConstraints = NO;
+            [row addArrangedSubview:section];
+            [section.widthAnchor constraintEqualToAnchor:row.widthAnchor constant:-30].active = YES;
+            [section.heightAnchor constraintEqualToConstant:32].active = YES;
+            [row addArrangedSubview:[self sourceHelpButtonForView:section]];
+            section = row;
+        }
+        section.translatesAutoresizingMaskIntoConstraints = NO;
+        [stack addArrangedSubview:section];
+        [section.widthAnchor constraintEqualToAnchor:stack.widthAnchor].active = YES;
+        [section.heightAnchor constraintEqualToConstant:height].active = YES;
+    }
+    return view;
+}
+
+- (CGFloat)reflowBasicSettingsBox:(NSBox *)box
+{
+    NSView *content = box.contentView;
+    NSArray<NSView *> *children = content.subviews.copy;
+    if (children.count == 0) return box.frame.size.height;
+    for (NSView *child in children) if ([child isKindOfClass:NSStackView.class]) return box.frame.size.height;
+    // Original XIB controls stay alive, keeping their values, targets, actions and outlets.
+    NSArray *ordered = [children sortedArrayUsingComparator:^NSComparisonResult(NSView *a, NSView *b) {
+        CGFloat ay = NSMidY(a.frame), by = NSMidY(b.frame);
+        return ay > by ? NSOrderedAscending : ay < by ? NSOrderedDescending : NSOrderedSame;
+    }];
+    NSMutableArray<NSMutableArray<NSView *> *> *rows = [NSMutableArray array];
+    CGFloat lastY = CGFLOAT_MAX;
+    for (NSView *child in ordered) {
+        if (rows.count == 0 || fabs(NSMidY(child.frame) - lastY) > 12) { [rows addObject:[NSMutableArray array]]; lastY = NSMidY(child.frame); }
+        [rows.lastObject addObject:child];
+    }
+    [NSLayoutConstraint deactivateConstraints:content.constraints];
+    NSStackView *stack = [[NSStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.orientation = NSUserInterfaceLayoutOrientationVertical;
+    stack.alignment = NSLayoutAttributeLeading;
+    stack.spacing = 4;
+    NSStackView *heading = [[NSStackView alloc] init];
+    heading.spacing = 10;
+    NSTextField *label = [NSTextField labelWithString:box.title];
+    label.font = [NSFont vlc_redesignFontOfSize:16 weight:NSFontWeightMedium];
+    [label setContentHuggingPriority:NSLayoutPriorityDefaultLow forOrientation:NSLayoutConstraintOrientationHorizontal];
+    NSButton *info = [NSButton buttonWithTitle:@"" target:self action:@selector(showBasicSettingsHelp:)];
+    info.image = [NSImage vlc_redesignImageNamed:@"settings-info"];
+    info.bordered = NO; info.accessibilityLabel = _NS("Help");
+    [info.widthAnchor constraintEqualToConstant:18].active = YES;
+    [info.heightAnchor constraintEqualToConstant:18].active = YES;
+    if (!_sourceHelpSections) _sourceHelpSections = [NSMapTable weakToWeakObjectsMapTable];
+    [_sourceHelpSections setObject:box forKey:info];
+    [heading addArrangedSubview:label]; [heading addArrangedSubview:info];
+    [stack addArrangedSubview:heading];
+    [heading.widthAnchor constraintEqualToAnchor:stack.widthAnchor].active = YES;
+    [heading.heightAnchor constraintEqualToConstant:42].active = YES;
+    CGFloat totalHeight = 50;
+    for (NSArray *sourceRow in rows) {
+        NSStackView *row = [[NSStackView alloc] init];
+        row.spacing = 12;
+        row.alignment = NSLayoutAttributeCenterY;
+        NSArray *horizontal = [sourceRow sortedArrayUsingComparator:^NSComparisonResult(NSView *a, NSView *b) { return a.frame.origin.x < b.frame.origin.x ? NSOrderedAscending : NSOrderedDescending; }];
+        CGFloat rowHeight = 44;
+        for (NSView *child in horizontal) {
+            CGFloat originalHeight = child.frame.size.height;
+            [child removeFromSuperview];
+            NSMutableArray *dimensions = [NSMutableArray array];
+            for (NSLayoutConstraint *constraint in child.constraints) {
+                if (constraint.firstItem == child && constraint.secondItem == nil && (constraint.firstAttribute == NSLayoutAttributeWidth || constraint.firstAttribute == NSLayoutAttributeHeight)) [dimensions addObject:constraint];
+            }
+            [NSLayoutConstraint deactivateConstraints:dimensions];
+            child.translatesAutoresizingMaskIntoConstraints = NO;
+            [row addArrangedSubview:child];
+            if ([child isKindOfClass:NSTextField.class] || [child isKindOfClass:NSPopUpButton.class]) {
+                BOOL field = [child isKindOfClass:NSPopUpButton.class] || [(NSTextField *)child isEditable];
+                NSLayoutConstraint *width = [child.widthAnchor constraintEqualToConstant:field ? 320 : 190];
+                width.priority = NSLayoutPriorityDefaultHigh; width.active = YES;
+                if (field) [child.heightAnchor constraintEqualToConstant:36].active = YES;
+            } else if ([child isKindOfClass:VLCRedesignBooleanControl.class]) {
+                [child.heightAnchor constraintEqualToConstant:32].active = YES;
+                if (horizontal.count == 1) [child.widthAnchor constraintEqualToAnchor:row.widthAnchor constant:-30].active = YES;
+            } else if ([child isKindOfClass:NSMatrix.class] || ![child isKindOfClass:NSControl.class]) {
+                rowHeight = MAX(rowHeight, originalHeight);
+                [child.heightAnchor constraintEqualToConstant:originalHeight].active = YES;
+            }
+        }
+        [row addArrangedSubview:[self sourceHelpButtonForView:row]];
+        [stack addArrangedSubview:row];
+        [row.widthAnchor constraintEqualToAnchor:stack.widthAnchor].active = YES;
+        [row.heightAnchor constraintEqualToConstant:rowHeight].active = YES;
+        totalHeight += rowHeight + 4;
+    }
+    box.titlePosition = NSNoTitle;
+    box.borderType = NSNoBorder;
+    box.contentViewMargins = NSZeroSize;
+    // NSBox's source XIB content frame retains its former title inset in its
+    // autoresizing mask; explicit bounds prevent that inset competing with new rows.
+    content.translatesAutoresizingMaskIntoConstraints = NO;
+    [NSLayoutConstraint activateConstraints:@[
+        [content.leadingAnchor constraintEqualToAnchor:box.leadingAnchor],
+        [content.trailingAnchor constraintEqualToAnchor:box.trailingAnchor],
+        [content.topAnchor constraintEqualToAnchor:box.topAnchor],
+        [content.bottomAnchor constraintEqualToAnchor:box.bottomAnchor]
+    ]];
+    [content addSubview:stack];
+    [NSLayoutConstraint activateConstraints:@[
+        [stack.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
+        [stack.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
+        [stack.topAnchor constraintEqualToAnchor:content.topAnchor],
+        [stack.bottomAnchor constraintLessThanOrEqualToAnchor:content.bottomAnchor]
+    ]];
+    return totalHeight;
+}
+- (void)showBasicSettingsHelp:(NSButton *)sender
+{
+    NSView *section = [_sourceHelpSections objectForKey:sender];
+    if (section) [_inlineAdvancedPreferences showHelpForView:section relativeToView:sender];
+}
+
+- (NSButton *)sourceHelpButtonForView:(NSView *)view
+{
+    // Basic rows reuse their original source tooltips; no explanation is invented.
+    NSButton *info = [NSButton buttonWithTitle:@"" target:self action:@selector(showBasicSettingsHelp:)];
+    info.image = [NSImage vlc_redesignImageNamed:@"settings-info"];
+    info.bordered = NO; info.accessibilityLabel = _NS("Help");
+    [info.widthAnchor constraintEqualToConstant:18].active = YES;
+    [info.heightAnchor constraintEqualToConstant:18].active = YES;
+    if (!_sourceHelpSections) _sourceHelpSections = [NSMapTable weakToWeakObjectsMapTable];
+    [_sourceHelpSections setObject:view forKey:info];
+    return info;
+}
+
+- (NSBox *)appearanceSettingsSection
+{
+    // General3046:9282 supplies Appearance/Theme/Accent color; swatches share onboarding1902:3670.
+    NSBox *box = [[NSBox alloc] initWithFrame:NSMakeRect(0., 0., 540., 194.)];
+    box.title = _NS("Appearance");
+    NSStackView *stack = [[NSStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.orientation = NSUserInterfaceLayoutOrientationVertical;
+    stack.alignment = NSLayoutAttributeLeading;
+    stack.spacing = 10.;
+    [box.contentView addSubview:stack];
+    [NSLayoutConstraint activateConstraints:@[
+        [stack.leadingAnchor constraintEqualToAnchor:box.contentView.leadingAnchor constant:16.],
+        [stack.trailingAnchor constraintLessThanOrEqualToAnchor:box.contentView.trailingAnchor constant:-16.],
+        [stack.topAnchor constraintEqualToAnchor:box.contentView.topAnchor constant:16.]
+    ]];
+    [stack addArrangedSubview:[NSTextField labelWithString:_NS("Theme")]];
+    _generalAppearanceControl = [NSSegmentedControl segmentedControlWithLabels:@[_NS("System"), _NS("Light"), _NS("Dark")]
+                                                                  trackingMode:NSSegmentSwitchTrackingSelectOne target:self action:@selector(changeSettingsAppearance:)];
+    for (NSInteger index = 0; index < 3; ++index) [_generalAppearanceControl setWidth:104. forSegment:index];
+    if (@available(macOS 10.14, *)) _generalAppearanceControl.enabled = YES;
+    else _generalAppearanceControl.enabled = NO;
+    [stack addArrangedSubview:_generalAppearanceControl];
+    [stack addArrangedSubview:[NSTextField labelWithString:_NS("Accent color")]];
+    NSArray<NSString *> *names = @[@"orange", @"red", @"yellow", @"green", @"cyan", @"blue", @"purple", @"pink", @"gray"];
+    NSArray<NSNumber *> *values = @[@0, @0xE15032, @0xC49E23, @0x19A234, @0x18AAD3, @0x185DD3, @0x8E42FF, @0xF052B3, @0xAFAFAF];
+    NSMutableArray<NSButton *> *buttons = [[NSMutableArray alloc] init];
+    for (NSUInteger index = 0; index < names.count; ++index) {
+        NSButton *button = [NSButton buttonWithTitle:@"" target:self action:@selector(changeSettingsAccent:)];
+        button.identifier = [@"onboarding-accent-" stringByAppendingString:names[index]];
+        button.tag = values[index].integerValue;
+        button.accessibilityLabel = names[index];
+        button.bordered = NO;
+        button.imageScaling = NSImageScaleProportionallyDown;
+        button.translatesAutoresizingMaskIntoConstraints = NO;
+        [NSLayoutConstraint activateConstraints:@[[button.widthAnchor constraintEqualToConstant:32.], [button.heightAnchor constraintEqualToConstant:32.]]];
+        [buttons addObject:button];
+    }
+    _generalAccentButtons = buttons;
+    NSStackView *colors = [NSStackView stackViewWithViews:buttons];
+    colors.spacing = 4.;
+    [stack addArrangedSubview:colors];
+    [self updateAppearanceSettingsControls];
+    return box;
+}
+
+- (void)updateAppearanceSettingsControls
+{
+    _generalAppearanceControl.selectedSegment = MAX(0, MIN(2, [(VLCApplication *)NSApp interfaceAppearance]));
+    NSInteger accent = [NSUserDefaults.standardUserDefaults integerForKey:@"VLCInterfaceAccentColor"];
+    for (NSButton *button in _generalAccentButtons) {
+        NSString *name = button.tag == accent ? [button.identifier stringByAppendingString:@"-active"] : button.identifier;
+        button.image = [NSImage vlc_redesignImageNamed:name];
+    }
+}
+
+- (void)changeSettingsAppearance:(NSSegmentedControl *)sender
+{
+    [NSUserDefaults.standardUserDefaults setInteger:sender.selectedSegment forKey:@"VLCInterfaceAppearance"];
+    [(VLCApplication *)NSApp applyInterfaceAppearance];
+}
+
+- (void)changeSettingsAccent:(NSButton *)sender
+{
+    [NSUserDefaults.standardUserDefaults setInteger:sender.tag forKey:@"VLCInterfaceAccentColor"];
+    [(VLCApplication *)NSApp applyInterfaceAppearance];
+    [self updateAppearanceSettingsControls];
+}
+
+- (void)restoreAppearancePreview
+{
+    [NSUserDefaults.standardUserDefaults setInteger:_appearanceBeforeEditing forKey:@"VLCInterfaceAppearance"];
+    [NSUserDefaults.standardUserDefaults setInteger:_accentBeforeEditing forKey:@"VLCInterfaceAccentColor"];
+    [(VLCApplication *)NSApp applyInterfaceAppearance];
+    [self updateAppearanceSettingsControls];
+    VLCSettingsProfileManager.sharedInstance.preferenceAppearanceBaseline=nil;
+}
+
+- (BOOL)windowShouldClose:(NSWindow *)sender
+{
+    [self restoreAppearancePreview];
+    return YES;
+}
+
+- (void)closePreferences:(id)sender
+{
+    [self buttonAction:self.cancelButton];
+}
+
+- (void)setupCategorySidebar
+{
+    // Category names come from the owner-provided transcript; all settings remain VLC's existing controls.
+    self.window.toolbar.visible = NO;
+    self.window.delegate = self;
+    NSView *root = self.window.contentView;
+    const CGFloat sidebarWidth = 216.; // Figma Settings 3046:9282
+    for (NSLayoutConstraint *constraint in root.constraints) {
+        if (constraint.firstItem == _scrollView && constraint.firstAttribute == NSLayoutAttributeLeading) {
+            constraint.constant = sidebarWidth;
+        } else if (constraint.firstItem == _scrollView && constraint.firstAttribute == NSLayoutAttributeTop) {
+            constraint.constant = 50.;
+        }
+    }
+    NSRect frame = self.window.frame;
+    frame.size.width = MAX(frame.size.width, 832.);
+    [self.window setFrame:frame display:NO];
+    self.window.minSize = NSMakeSize(832., 500.);
+
+    NSView *sidebar = [[NSView alloc] init];
+    sidebar.translatesAutoresizingMaskIntoConstraints = NO;
+    sidebar.identifier = @"VLCRedesignedSettingsSidebar";
+    sidebar.wantsLayer = YES;
+    sidebar.layer.backgroundColor = NSColor.VLCSurfaceBackgroundColor.CGColor;
+    [root addSubview:sidebar];
+    [NSLayoutConstraint activateConstraints:@[
+        [sidebar.leadingAnchor constraintEqualToAnchor:root.leadingAnchor],
+        [sidebar.topAnchor constraintEqualToAnchor:root.topAnchor constant:50.],
+        [sidebar.bottomAnchor constraintEqualToAnchor:_scrollView.bottomAnchor],
+        [sidebar.widthAnchor constraintEqualToConstant:sidebarWidth]
+    ]];
+
+    NSScrollView *sidebarScroll = [[NSScrollView alloc] init];
+    sidebarScroll.translatesAutoresizingMaskIntoConstraints = NO;
+    sidebarScroll.drawsBackground = NO;
+    sidebarScroll.hasVerticalScroller = YES;
+    sidebarScroll.autohidesScrollers = YES;
+    sidebarScroll.contentView = [[VLCSimplePrefsClipView alloc] init];
+    sidebarScroll.contentView.drawsBackground = NO;
+    [sidebar addSubview:sidebarScroll];
+    [sidebarScroll applyConstraintsToFillSuperview];
+    NSView *document = [[NSView alloc] init];
+    document.translatesAutoresizingMaskIntoConstraints = NO;
+    sidebarScroll.documentView = document;
+    NSStackView *stack = [[NSStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.orientation = NSUserInterfaceLayoutOrientationVertical;
+    stack.alignment = NSLayoutAttributeLeading;
+    stack.spacing = VLCUIUnits.smallSpacing;
+    [document addSubview:stack];
+    [NSLayoutConstraint activateConstraints:@[
+        [document.leadingAnchor constraintEqualToAnchor:sidebarScroll.contentView.leadingAnchor],
+        [document.topAnchor constraintEqualToAnchor:sidebarScroll.contentView.topAnchor],
+        [document.widthAnchor constraintEqualToAnchor:sidebarScroll.contentView.widthAnchor],
+        [stack.leadingAnchor constraintEqualToAnchor:document.leadingAnchor constant:14.],
+        [stack.trailingAnchor constraintEqualToAnchor:document.trailingAnchor constant:-14.],
+        [stack.topAnchor constraintEqualToAnchor:document.topAnchor constant:20.],
+        [stack.bottomAnchor constraintEqualToAnchor:document.bottomAnchor constant:-20.]
+    ]];
+
+    // Search and the title use the exact Figma header labels; matching uses existing setting copy/tooltips.
+    _settingsSearchField = [[NSSearchField alloc] init];
+    _settingsSearchField.translatesAutoresizingMaskIntoConstraints = NO;
+    _settingsSearchField.placeholderString = _NS("Search");
+    _settingsSearchField.sendsSearchStringImmediately = YES;
+    _settingsSearchField.sendsWholeSearchString = NO;
+    _settingsSearchField.target = self;
+    _settingsSearchField.action = @selector(filterSettingsCategories:);
+    [root addSubview:_settingsSearchField];
+    NSTextField *title = [[NSTextField alloc] init];
+    title.translatesAutoresizingMaskIntoConstraints = NO;
+    title.stringValue = _NS("Global Settings");
+    title.bordered = NO;
+    title.editable = NO;
+    title.drawsBackground = NO;
+    title.font = [NSFont vlc_redesignFontOfSize:16. weight:NSFontWeightRegular];
+    title.textColor = NSColor.VLCControlForegroundColor;
+    [root addSubview:title];
+    NSButton *close = [NSButton buttonWithTitle:@"" target:self action:@selector(closePreferences:)];
+    close.bordered = NO;
+    close.translatesAutoresizingMaskIntoConstraints = NO;
+    close.image = [NSImage vlc_redesignImageNamed:@"settings-close"];
+    close.accessibilityLabel = _NS("Close");
+    [root addSubview:close];
+    _settingsProfileButton=[NSButton buttonWithTitle:VLCSettingsProfileManager.sharedInstance.currentName target:self action:@selector(showSettingsProfiles:)];
+    _settingsProfileButton.translatesAutoresizingMaskIntoConstraints=NO; [root addSubview:_settingsProfileButton];
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(settingsProfileChanged:) name:VLCSettingsProfileChanged object:nil];
+    [NSLayoutConstraint activateConstraints:@[
+        [close.trailingAnchor constraintEqualToAnchor:root.trailingAnchor constant:-16.],
+        [close.centerYAnchor constraintEqualToAnchor:_settingsSearchField.centerYAnchor],
+        [close.widthAnchor constraintEqualToConstant:24.],
+        [close.heightAnchor constraintEqualToConstant:24.],
+        [_settingsProfileButton.trailingAnchor constraintEqualToAnchor:close.leadingAnchor constant:-16.],
+        [_settingsProfileButton.centerYAnchor constraintEqualToAnchor:close.centerYAnchor],
+        [_settingsProfileButton.widthAnchor constraintEqualToConstant:140.],
+        [_settingsProfileButton.heightAnchor constraintEqualToConstant:32.],
+        [_settingsSearchField.leadingAnchor constraintEqualToAnchor:root.leadingAnchor constant:8.],
+        [_settingsSearchField.topAnchor constraintEqualToAnchor:root.topAnchor constant:8.],
+        [_settingsSearchField.widthAnchor constraintEqualToConstant:200.],
+        [_settingsSearchField.heightAnchor constraintEqualToConstant:34.],
+        [title.leadingAnchor constraintEqualToAnchor:root.leadingAnchor constant:248.],
+        [title.centerYAnchor constraintEqualToAnchor:_settingsSearchField.centerYAnchor]
+    ]];
+
+    // Keep the old view roots alive until every section has moved to its new category.
+    _categoryViews = @[_intfView, _audioView, _videoView, _inputView, _osdView, _hotkeysView, _mediaLibraryView];
+    NSView *general = [self settingsViewWithSections:@[[self appearanceSettingsSection], _intf_generalSettingsBox]];
+    NSView *interface = [self settingsViewWithSections:@[_video_displayBox, _video_fullscreenBox]];
+    NSView *privacy = [self settingsViewWithSections:@[_intf_networkBox, _audio_lastBox]];
+    NSView *playback = [self settingsViewWithSections:@[_intf_playbackControlBox, _intf_playbackBehaviourBox]];
+    NSView *video = [self settingsViewWithSections:@[_video_enableCheckbox, _video_videoBox, _video_snapBox]];
+    NSView *audio = [self settingsViewWithSections:@[_audio_enableCheckbox, _audio_generalBox, _audio_effectsBox]];
+    NSView *network = [self settingsViewWithSections:@[_input_netBox, _intf_luahttpBox]];
+    NSView *performance = [self settingsViewWithSections:@[_input_muxBox, _input_cachingBox]];
+    NSView *recording = [self settingsViewWithSections:@[_input_recordBox]];
+    NSButton *addons = [[NSButton alloc] init];
+    addons.title = _NS("Addons Manager");
+    addons.bezelStyle = NSBezelStyleRounded;
+    addons.target = VLCMain.sharedInstance.mainMenu;
+    addons.action = @selector(openAddonManager:);
+    NSView *extensions = [self settingsViewWithSections:@[addons]];
+
+    NSMutableArray<NSView *> *views = [NSMutableArray arrayWithArray:@[general, interface, privacy, _hotkeysView, playback, video, audio, _osdView]];
+    NSMutableArray<NSString *> *labels = [NSMutableArray arrayWithArray:@[_NS("General"), _NS("Interface"), _NS("Privacy"), _NS("Controls"), _NS("Playback"), _NS("Video"), _NS("Audio"), _NS("Subtitles")]];
+    NSMutableArray<NSString *> *symbols = [NSMutableArray arrayWithArray:@[@"gearshape", @"rectangle", @"hand.raised", @"keyboard", @"play", @"film", @"speaker.wave.2", @"captions.bubble"]];
+    if (VLCMain.sharedInstance.libraryController.shouldUseMediaLibrary) {
+        [views addObject:_mediaLibraryView];
+        [labels addObject:_NS("Library")];
+        [symbols addObject:@"books.vertical"];
+    }
+    [views addObjectsFromArray:@[network, performance, recording, extensions]];
+    [labels addObjectsFromArray:@[_NS("Network"), _NS("Performance"), _NS("Recording"), _NS("Extensions")]];
+    [symbols addObjectsFromArray:@[@"network", @"speedometer", @"record.circle", @"puzzlepiece.extension"]];
+    _categoryViews = views;
+    _categoryIconNames = @[@"general", @"interface", @"privacy", @"controls", @"playback", @"video", @"audio", @"subtitles", @"library", @"network", @"performance", @"recording", @"extensions"];
+    if (!VLCMain.sharedInstance.libraryController.shouldUseMediaLibrary) {
+        NSMutableArray *icons = [_categoryIconNames mutableCopy];
+        [icons removeObject:@"library"];
+        _categoryIconNames = icons;
+    }
+    _privacyCategoryView = privacy;
+    _intfView = interface;
+    _audioView = audio;
+    _videoView = video;
+    _inputView = performance;
+
+    // These keys already have original simple controls or coupled save paths below.
+    // Advanced rows must never compete with volume scaling, caching presets, filters or hotkeys.
+    NSSet *basicKeys = [NSSet setWithArray:@[@"macosx-continue-playback", @"macosx-statusicon", @"macosx-nativefullscreenmode", @"embedded-video", @"macosx-control-itunes", @"metadata-network-access", @"http-password", @"audio", @"volume-save", @"auhal-volume", @"audio-language", @"audio-visual", @"lastfm-username", @"lastfm-password", @"video", @"fullscreen", @"video-on-top", @"macosx-black", @"video-deco", @"macosx-pause-minimized", @"macosx-video-autoresize", @"macosx-vdev", @"snapshot-path", @"snapshot-prefix", @"snapshot-sequential", @"snapshot-format", @"deinterlace", @"deinterlace-mode", @"input-record-path", @"videotoolbox", @"input-fast-seek", @"avi-index", @"avcodec-skiploopfilter", @"file-caching", @"network-caching", @"disc-caching", @"live-caching", @"osd", @"subsdec-encoding", @"sub-language", @"freetype-font", @"freetype-color", @"sub-text-scale", @"freetype-opacity", @"freetype-bold", @"freetype-outline-color", @"freetype-outline-thickness", @"macosx-mediakeys", @"control", @"extraintf", @"audio-filter"]];
+    _inlineAdvancedPreferences = [[VLCInlineAdvancedPreferences alloc] initWithExcludedOptionNames:basicKeys];
+    NSMutableArray *combinedViews = [NSMutableArray array];
+    for (NSUInteger index = 0; index < views.count; index++) {
+        NSView *basic = views[index];
+        NSView *combined = [[NSView alloc] init];
+        combined.translatesAutoresizingMaskIntoConstraints = NO;
+        NSStackView *category = [[NSStackView alloc] init];
+        category.translatesAutoresizingMaskIntoConstraints = NO;
+        category.orientation = NSUserInterfaceLayoutOrientationVertical;
+        category.alignment = NSLayoutAttributeLeading;
+        category.spacing = 16;
+        [combined addSubview:category];
+        CGFloat legacyHeight = basic.frame.size.height;
+        basic.translatesAutoresizingMaskIntoConstraints = NO;
+        [category addArrangedSubview:basic];
+        [basic.widthAnchor constraintEqualToAnchor:category.widthAnchor].active = YES;
+        if (legacyHeight > 0) [basic.heightAnchor constraintEqualToConstant:legacyHeight].active = YES;
+        NSView *advanced = [_inlineAdvancedPreferences viewForCategory:_categoryIconNames[index]];
+        NSView *advancedInset = [[NSView alloc] init];
+        advancedInset.translatesAutoresizingMaskIntoConstraints = NO;
+        [advancedInset addSubview:advanced];
+        [category addArrangedSubview:advancedInset];
+        [advancedInset.widthAnchor constraintEqualToAnchor:category.widthAnchor].active = YES;
+        [NSLayoutConstraint activateConstraints:@[
+            [category.leadingAnchor constraintEqualToAnchor:combined.leadingAnchor],
+            [category.trailingAnchor constraintEqualToAnchor:combined.trailingAnchor],
+            [category.topAnchor constraintEqualToAnchor:combined.topAnchor],
+            [category.bottomAnchor constraintEqualToAnchor:combined.bottomAnchor constant:-20],
+            [advanced.leadingAnchor constraintEqualToAnchor:advancedInset.leadingAnchor constant:20],
+            [advanced.trailingAnchor constraintEqualToAnchor:advancedInset.trailingAnchor constant:-20],
+            [advanced.topAnchor constraintEqualToAnchor:advancedInset.topAnchor],
+            [advanced.bottomAnchor constraintEqualToAnchor:advancedInset.bottomAnchor]
+        ]];
+        [combinedViews addObject:combined];
+        if (basic == privacy) _privacyCategoryView = combined;
+    }
+    _categoryViews = combinedViews;
+
+    NSMutableArray<NSButton *> *buttons = NSMutableArray.array;
+    for (NSUInteger index = 0; index < labels.count; ++index) {
+        if (index == 0 || index == 4 || views[index] == network) {
+            NSTextField *section = [[NSTextField alloc] init];
+            section.stringValue = index == 0 ? _NS("App") : (index == 4 ? _NS("Media") : _NS("System"));
+            section.bordered = NO;
+            section.editable = NO;
+            section.drawsBackground = NO;
+            section.font = [NSFont vlc_redesignFontOfSize:14. weight:NSFontWeightRegular];
+            section.textColor = NSColor.VLCSecondaryForegroundColor;
+            [stack addArrangedSubview:section];
+        }
+        NSButton *button = [[NSButton alloc] init];
+        button.translatesAutoresizingMaskIntoConstraints = NO;
+        button.identifier = @"VLCRedesignedSettingsCategory";
+        button.title = labels[index];
+        if (@available(macOS 11.0, *)) {
+            button.image = [NSImage imageWithSystemSymbolName:symbols[index] accessibilityDescription:labels[index]];
+        } else {
+            button.image = [[NSImage imageNamed:@"VLCInterfaceCone"] copy];
+            button.image.size = NSMakeSize(18., 18.);
+        }
+        button.image = [NSImage vlc_redesignImageNamed:[@"settings-" stringByAppendingString:_categoryIconNames[index]]] ?: button.image;
+        button.imagePosition = NSImageLeft;
+        button.imageScaling = NSImageScaleProportionallyDown;
+        button.alignment = NSTextAlignmentLeft;
+        button.font = [NSFont vlc_redesignFontOfSize:14. weight:NSFontWeightRegular];
+        button.bordered = NO;
+        button.wantsLayer = YES;
+        button.layer.cornerRadius = 2.; // Figma setting-category row
+        button.target = self;
+        button.action = @selector(selectSidebarCategory:);
+        button.tag = index;
+        if (views[index] == _mediaLibraryView) {
+            button.enabled = VLCMain.sharedInstance.libraryController.libraryModel != nil;
+        }
+        [stack addArrangedSubview:button];
+        [NSLayoutConstraint activateConstraints:@[
+            [button.widthAnchor constraintEqualToAnchor:stack.widthAnchor],
+            [button.heightAnchor constraintEqualToConstant:40.]
+        ]];
+        [buttons addObject:button];
+    }
+    _categoryButtons = buttons;
+    [self showSettingsForCategory:_categoryViews.firstObject];
+}
+
+- (void)showSettingsProfiles:(NSButton *)sender
+{
+    [VLCSettingsProfileManager.sharedInstance showProfiles:sender];
+}
+- (void)settingsProfileChanged:(NSNotification *)notification
+{
+    _settingsProfileButton.title=VLCSettingsProfileManager.sharedInstance.currentName;
+    if(![notification.userInfo[@"applied"] boolValue]) return;
+    [self resetControls]; [_inlineAdvancedPreferences resetValues]; [self updateAppearanceSettingsControls];
+    _appearanceBeforeEditing=[NSUserDefaults.standardUserDefaults integerForKey:@"VLCInterfaceAppearance"];
+    _accentBeforeEditing=[NSUserDefaults.standardUserDefaults integerForKey:@"VLCInterfaceAccentColor"];
+}
+
+- (void)showPrivacySettings
+{
+    [self showSettingsForCategory:_privacyCategoryView];
+}
+
+- (BOOL)view:(NSView *)view matchesSettingsSearch:(NSString *)query
+{
+    if ([view isKindOfClass:NSControl.class] && [[(NSControl *)view toolTip] localizedCaseInsensitiveContainsString:query]) return YES;
+    if ([view isKindOfClass:NSBox.class] && [[(NSBox *)view title] localizedCaseInsensitiveContainsString:query]) return YES;
+    if ([view isKindOfClass:NSButton.class] && [[(NSButton *)view title] localizedCaseInsensitiveContainsString:query]) return YES;
+    if ([view isKindOfClass:NSTextField.class] && ![(NSTextField *)view isEditable] && [[(NSTextField *)view stringValue] localizedCaseInsensitiveContainsString:query]) return YES;
+    for (NSView *child in view.subviews) {
+        if ([self view:child matchesSettingsSearch:query]) return YES;
+    }
+    return NO;
+}
+
+- (void)filterSettingsCategories:(NSSearchField *)sender
+{
+    NSString *query = sender.stringValue;
+    NSView *firstMatch = nil;
+    for (NSButton *button in _categoryButtons) {
+        BOOL matches = query.length == 0 || [button.title localizedCaseInsensitiveContainsString:query] || [self view:_categoryViews[button.tag] matchesSettingsSearch:query];
+        button.hidden = !matches;
+        if (matches && firstMatch == nil) firstMatch = _categoryViews[button.tag];
+    }
+    if (firstMatch != nil) [self showSettingsForCategory:firstMatch];
+    else _contentView.subviews = @[];
+}
+
+- (void)selectSidebarCategory:(NSButton *)sender
+{
+    [self showSettingsForCategory:_categoryViews[sender.tag]];
 }
 
 - (void)setupMediaLibraryControlInterface
@@ -497,8 +1045,11 @@ create_toolbar_item(NSString *itemIdent, NSString *name, NSString *desc, NSStrin
 
     [object removeAllItems];
     p_item = config_FindConfig(name);
-    /* serious problem, if no item found */
-    assert(p_item);
+    // Optional modules may be absent from a VLC build. No option means no editable control.
+    if (p_item == NULL) {
+        object.enabled = NO;
+        return;
+    }
 
     char **values, **texts;
     ssize_t count = config_GetPszChoices(name, &values, &texts);
@@ -545,8 +1096,11 @@ create_toolbar_item(NSString *itemIdent, NSString *name, NSString *desc, NSStrin
     [object removeAllItems];
     p_item = config_FindConfig(name);
 
-    /* serious problem, if no item found */
-    assert(p_item);
+    // Optional modules may be absent from a VLC build. No option means no editable control.
+    if (p_item == NULL) {
+        object.enabled = NO;
+        return;
+    }
 
     int64_t *values;
     char **texts;
@@ -569,15 +1123,19 @@ create_toolbar_item(NSString *itemIdent, NSString *name, NSString *desc, NSStrin
 
 - (void)setupButton: (NSButton *)object forBoolValue: (const char *)name
 {
+    module_config_t *item = config_FindConfig(name);
+    if (item == NULL) { object.enabled = NO; return; }
     [object setState: config_GetInt(name)];
-    [object setToolTip: NSTR(config_GetLabel(name))];
+    [object setToolTip: NSTR(item->psz_longtext ?: config_GetLabel(name))];
 }
 
 - (void)setupField:(NSTextField *)object forOption:(const char *)psz_option
 {
+    module_config_t *item = config_FindConfig(psz_option);
+    if (item == NULL) { object.enabled = NO; object.stringValue = @""; return; }
     char *psz_tmp = config_GetPsz(psz_option);
     [object setStringValue: toNSStr(psz_tmp)];
-    [object setToolTip: NSTR(config_GetLabel(psz_option))];
+    [object setToolTip: NSTR(item->psz_longtext ?: config_GetLabel(psz_option))];
     free(psz_tmp);
 }
 
@@ -623,6 +1181,7 @@ create_toolbar_item(NSString *itemIdent, NSString *name, NSString *desc, NSStrin
     const char *pref = NULL;
     NSUserDefaults * const defaults = NSUserDefaults.standardUserDefaults;
     pref = [[defaults objectForKey:@"language"] UTF8String];
+    [_intf_languagePopup removeAllItems];
     for (size_t x = 0; x < ARRAY_SIZE(language_map); x++) {
         [_intf_languagePopup addItemWithTitle:toNSStr(language_map[x].name)];
         if (pref) {
@@ -669,6 +1228,9 @@ create_toolbar_item(NSString *itemIdent, NSString *name, NSString *desc, NSStrin
     [_intf_enableluahttpCheckbox setState: httpEnabled ? NSOnState : NSOffState];
     _intf_luahttppwdTextField.enabled = httpEnabled;
 
+    const BOOL httpAvailable = config_FindConfig("http-password") != NULL;
+    _intf_enableluahttpCheckbox.enabled = httpAvailable;
+    _intf_luahttpBox.hidden = !httpAvailable;
     [self setupField:_intf_luahttppwdTextField forOption: "http-password"];
 
     /******************
@@ -812,11 +1374,15 @@ create_toolbar_item(NSString *itemIdent, NSString *name, NSString *desc, NSStrin
     [self setupButton:_osd_font_colorPopup forIntList: "freetype-color"];
     _osd_font_sizeSlider.intValue = (int)config_GetInt("sub-text-scale");
     [_osd_font_sizeTextField setStringValue: [NSString stringWithFormat:@"%.2fx", _osd_font_sizeSlider.intValue / 100.]];
+    const BOOL freetypeAvailable = config_FindConfig("freetype-opacity") != NULL;
+    _osd_fontBox.hidden = !freetypeAvailable;
+    if (freetypeAvailable) {
     i = config_GetInt("freetype-opacity") * 100.0 / 255.0 + 0.5;
     [_osd_opacityTextField setIntValue: i];
     [_osd_opacitySlider setIntValue: i];
     [_osd_opacitySlider setToolTip: NSTR(config_GetLabel("freetype-opacity"))];
     [_osd_opacityTextField setToolTip: [_osd_opacitySlider toolTip]];
+    }
     [self setupButton:_osd_forceboldCheckbox forBoolValue: "freetype-bold"];
     [self setupButton:_osd_outline_colorPopup forIntList: "freetype-outline-color"];
     [self setupButton:_osd_outline_thicknessPopup forIntList: "freetype-outline-thickness"];
@@ -864,13 +1430,25 @@ create_toolbar_item(NSString *itemIdent, NSString *name, NSString *desc, NSStrin
 
 - (void)showSimplePrefs
 {
+    if (!self.window.isVisible) {
+        _appearanceBeforeEditing = [(VLCApplication *)NSApp interfaceAppearance];
+        _accentBeforeEditing = [NSUserDefaults.standardUserDefaults integerForKey:@"VLCInterfaceAccentColor"];
+    }
+    VLCSettingsProfileManager.sharedInstance.preferenceAppearanceBaseline=@{
+        @"VLCInterfaceAppearance":@(_appearanceBeforeEditing),@"VLCInterfaceAccentColor":@(_accentBeforeEditing)
+    };
+    [self updateAppearanceSettingsControls];
     /* we want to show the interface settings, if no category was chosen */
-    if ([[self.window toolbar] selectedItemIdentifier] == nil) {
+    if (_contentView.subviews.count == 0) {
         [[self.window toolbar] setSelectedItemIdentifier: VLCIntfSettingToolbarIdentifier];
-        [self showInterfaceSettings];
+        [self showSettingsForCategory:_categoryViews.firstObject];
     }
 
     [self resetControls];
+    [_inlineAdvancedPreferences resetValues];
+    for (NSView *category in _categoryViews) [_inlineAdvancedPreferences addSourceHelpToView:category];
+    for (NSButton *help in _sourceHelpSections.keyEnumerator)
+        help.hidden = ![_inlineAdvancedPreferences hasSourceHelpForView:[_sourceHelpSections objectForKey:help]];
 
     [self.window makeKeyAndOrderFront: self];
 }
@@ -884,13 +1462,18 @@ create_toolbar_item(NSString *itemIdent, NSString *name, NSString *desc, NSStrin
 - (IBAction)buttonAction:(id)sender
 {
     if (sender == _cancelButton) {
+        [self restoreAppearancePreview];
         [[NSFontPanel sharedFontPanel] close];
         [self.window orderOut: sender];
     } else if (sender == _saveButton) {
+        VLCSettingsProfileManager.sharedInstance.preferenceAppearanceBaseline=nil;
         [self saveChangedSettings];
+        _appearanceBeforeEditing = [(VLCApplication *)NSApp interfaceAppearance];
+        _accentBeforeEditing = [NSUserDefaults.standardUserDefaults integerForKey:@"VLCInterfaceAccentColor"];
         [[NSFontPanel sharedFontPanel] close];
         [self.window orderOut: sender];
     } else if (sender == _showAllButton) {
+        [self restoreAppearancePreview];
         [self.window orderOut: self];
         [VLCMain.sharedInstance.preferences showPrefsWithLevel:[self.window level]];
     } else
@@ -990,8 +1573,10 @@ static inline void save_string_list(intf_thread_t * __unused p_intf, id object, 
 
         [self changeModule:@"growl" inConfig:@"control" enable:[_intf_enableNotificationsCheckbox state] == NSOnState];
 
-        [self changeModule:@"http" inConfig:@"extraintf" enable:[_intf_enableluahttpCheckbox state] == NSOnState];
-        config_PutPsz("http-password", [[_intf_luahttppwdTextField stringValue] UTF8String]);
+        if (config_FindConfig("http-password") != NULL) {
+            [self changeModule:@"http" inConfig:@"extraintf" enable:[_intf_enableluahttpCheckbox state] == NSOnState];
+            config_PutPsz("http-password", [[_intf_luahttppwdTextField stringValue] UTF8String]);
+        }
 
         SaveIntList(_intf_pauseitunesPopup, "macosx-control-itunes");
         SaveIntList(_intf_continueplaybackPopup, "macosx-continue-playback");
@@ -1097,6 +1682,7 @@ static inline void save_string_list(intf_thread_t * __unused p_intf, id object, 
 
         config_PutPsz("sub-language", [[_osd_langTextField stringValue] UTF8String]);
 
+        if (config_FindConfig("freetype-font") != NULL) {
         config_PutPsz("freetype-font", [[_osd_fontTextField stringValue] UTF8String]);
         SaveIntList(_osd_font_colorPopup, "freetype-color");
         config_PutInt("sub-text-scale", _osd_font_sizeSlider.intValue);
@@ -1104,6 +1690,7 @@ static inline void save_string_list(intf_thread_t * __unused p_intf, id object, 
         config_PutInt("freetype-bold", [_osd_forceboldCheckbox state]);
         SaveIntList(_osd_outline_colorPopup, "freetype-outline-color");
         SaveIntList(_osd_outline_thicknessPopup, "freetype-outline-thickness");
+        }
         _osdSettingChanged = NO;
     }
 
@@ -1119,15 +1706,30 @@ static inline void save_string_list(intf_thread_t * __unused p_intf, id object, 
         config_PutInt("macosx-mediakeys", [_hotkeys_mediakeysCheckbox state]);
     }
 
+    [_inlineAdvancedPreferences applyChanges];
     fixIntfSettings();
 
     /* okay, let's save our changes to vlcrc */
     config_SaveConfigFile(p_intf);
+    [VLCSettingsProfileManager.sharedInstance saveActiveProfile];
     [NSNotificationCenter.defaultCenter postNotificationName:VLCConfigurationChangedNotification object:nil];
 }
 
 - (void)showSettingsForCategory:(NSView *)categoryView
 {
+    NSUInteger selectedIndex = [_categoryViews indexOfObject:categoryView];
+    for (NSButton *button in _categoryButtons) {
+        BOOL selected = button.tag == selectedIndex;
+        button.state = selected ? NSControlStateValueOn : NSControlStateValueOff;
+        button.layer.backgroundColor = selected ? NSColor.VLCSelectedRowColor.CGColor : nil;
+        NSString *icon = [NSString stringWithFormat:@"settings-%@%@", _categoryIconNames[button.tag], selected ? @"-active" : @""];
+        button.image = [NSImage vlc_redesignImageNamed:icon] ?: button.image;
+        if (@available(macOS 10.14, *)) {
+            button.contentTintColor = selected ? NSColor.VLCPrimaryForegroundColor : NSColor.VLCSecondaryForegroundColor;
+        }
+        [button vlc_applyRedesignStyle];
+    }
+    [categoryView vlc_applyRedesignStyle];
     [_contentView setSubviews:[NSArray array]];
     [_contentView addSubview:categoryView];
 
@@ -1438,6 +2040,9 @@ static inline void save_string_list(intf_thread_t * __unused p_intf, id object, 
 - (IBAction)hotkeySettingChanged:(id)sender
 {
     if (sender == _hotkeys_listbox) {
+        if (_hotkeys_listbox.selectedRow < 0 || _hotkeys_listbox.selectedRow >= _hotkeyDescriptions.count) return;
+        _keyInTransition = nil;
+        _hotkeys_change_okButton.enabled = NO;
         [_hotkeys_changeLabel setStringValue: [NSString stringWithFormat: _NS("Press new keys for\n\"%@\""),
                                                [_hotkeyDescriptions objectAtIndex:[_hotkeys_listbox selectedRow]]]];
         [_hotkeys_change_keysLabel setStringValue: OSXStringKeyToString([_hotkeySettings objectAtIndex:[_hotkeys_listbox selectedRow]])];

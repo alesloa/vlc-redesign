@@ -38,12 +38,14 @@
 #include "ui_sprefs_medialibrary.h"
 
 class MLFoldersEditor;
+class QHBoxLayout;
 
 #ifdef _WIN32
 # include "util/registry.hpp"
 #endif
 
 #include <QWidget>
+#include <QSet>
 class QLineEdit;
 class QLabel;
 class QPushButton;
@@ -62,6 +64,23 @@ enum {
 #define SPrefsDefaultCat SPrefsInterface
 
 enum {
+    SPrefsGroupGeneral,
+    SPrefsGroupInterface,
+    SPrefsGroupPrivacy,
+    SPrefsGroupControls,
+    SPrefsGroupPlayback,
+    SPrefsGroupVideo,
+    SPrefsGroupAudio,
+    SPrefsGroupSubtitles,
+    SPrefsGroupLibrary,
+    SPrefsGroupNetwork,
+    SPrefsGroupPerformance,
+    SPrefsGroupRecording,
+    SPrefsGroupExtensions,
+    SPrefsGroupMax
+};
+
+enum {
     CachingCustom = 0,
     CachingLowest = 100,
     CachingLow    = 200,
@@ -71,6 +90,7 @@ enum {
 };
 
 class ConfigControl;
+class KeySelectorControl;
 class QString;
 
 #ifdef _WIN32
@@ -83,6 +103,12 @@ class SPrefsCatList : public QWidget
 public:
     SPrefsCatList( qt_intf_t *, QWidget * );
     virtual ~SPrefsCatList() {}
+    void setCategoryVisible( int, bool );
+    void setCurrentCategory( int );
+    static QString groupTitle( int );
+    static int groupPanel( int );
+    static int groupSubcategory( int );
+    static QStringList groupSections( int );
 private:
     qt_intf_t *p_intf;
 signals:
@@ -98,11 +124,22 @@ public:
     SPrefsPanel( qt_intf_t *, QWidget *, int );
     virtual ~SPrefsPanel();
     void apply();
+    bool matches( const QString &, int group );
+    void showGroup( int );
+    void toggleGroupAdvanced();
+    void setShortcutsOnly( bool );
+    void moveShortcutsSearchTo(QHBoxLayout *);
 #ifdef _WIN32
     void cleanLang();
 #endif
+signals:
+    void advancedRequested();
 
 private:
+    void addHelp( QWidget *, module_config_t *, QLabel * = nullptr );
+    bool groupContains( QWidget *, int ) const;
+    void ensureGroupOptions( int );
+    void editShortcuts();
     template<typename ControlType, typename WidgetType>
     void configGeneric(const char* option, QLabel* label, WidgetType* control);
     template<typename ControlType, typename WidgetType>
@@ -117,6 +154,20 @@ private:
     QList<ConfigControl *> controls;
 
     int number;
+    QWidget *m_formPanel = nullptr;
+    QLabel *m_panelTitle = nullptr;
+    QHash<QWidget *, bool> m_groupVisibility;
+    QSet<int> m_loadedGroups;
+    QSet<int> m_expandedGroups;
+    int m_currentGroup = SPrefsGroupGeneral;
+    QPushButton *m_advancedOptions = nullptr;
+    KeySelectorControl *m_keySelector = nullptr;
+    QGroupBox *m_shortcutsSummary = nullptr;
+    QLabel *m_shortcutsStatus = nullptr;
+    QGroupBox *m_mouseSettings = nullptr;
+    QGroupBox *m_appearance = nullptr;
+    QGroupBox *m_appearanceAdvanced = nullptr;
+    bool m_shortcutsOnly = false;
 
     struct AudioControlGroup {
         AudioControlGroup(QLabel* label, QWidget* widget, QPushButton* button = nullptr)

@@ -229,6 +229,8 @@
 - (NSArray *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar;
 
 - (void)showSimplePrefs;
+- (void)showHotkeySettings;
+- (void)showPrivacySettings;
 - (void)showSimplePrefsWithLevel:(NSInteger)i_window_level;
 
 - (IBAction)buttonAction:(id)sender;

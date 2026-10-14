@@ -329,7 +329,7 @@ Gw
                                     <action selector="interfaceSettingChanged:" target="-2" id="iZ8-Hl-fvA"/>
                                 </connections>
                             </popUpButton>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="r3P-eU-tEX">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="r3P-eU-tEX" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="15" y="49" width="189" height="18"/>
                                 <buttonCell key="cell" type="check" title="Enable VLC status bar icon" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="Vhy-1T-Knj">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -339,7 +339,7 @@ Gw
                                     <action selector="interfaceSettingChanged:" target="-2" id="Ys3-K6-647"/>
                                 </connections>
                             </button>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="QZ2-zA-u6A">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="QZ2-zA-u6A" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="15" y="16" width="286" height="18"/>
                                 <buttonCell key="cell" type="check" title="Display album track numbers in play queue" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="I5V-9N-WTo">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -395,7 +395,7 @@ Gw
                                     <action selector="interfaceSettingChanged:" target="-2" id="SxN-sI-55J"/>
                                 </connections>
                             </popUpButton>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="SYi-7I-cKE">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="SYi-7I-cKE" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="15" y="14" width="201" height="18"/>
                                 <buttonCell key="cell" type="check" title="Display end of playback view" bezelStyle="regularSquare" imagePosition="left" alignment="left" state="on" inset="2" id="Vsg-0v-H35">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -431,7 +431,7 @@ Gw
                         <rect key="frame" x="4" y="5" width="555" height="67"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="3564">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="3564" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="16" y="40" width="288" height="18"/>
                                 <buttonCell key="cell" type="check" title="Enable notifications on playlist item change" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="3565">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -488,7 +488,7 @@ Gw
                         <rect key="frame" x="4" y="5" width="555" height="95"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="3556">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="3556" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="14" y="38" width="221" height="18"/>
                                 <buttonCell key="cell" type="check" title="Automatically check for updates" bezelStyle="regularSquare" imagePosition="left" alignment="left" state="on" inset="2" id="3557">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -498,7 +498,7 @@ Gw
                                     <action selector="interfaceSettingChanged:" target="-2" id="t18-Rf-im8"/>
                                 </connections>
                             </button>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="3928">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="3928" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="14" y="68" width="165" height="18"/>
                                 <buttonCell key="cell" type="check" title="Allow metadata access" bezelStyle="regularSquare" imagePosition="left" alignment="left" state="on" inset="2" id="3929">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -575,7 +575,7 @@ Gw
                                     <outlet property="delegate" destination="-2" id="CTK-cN-vZp"/>
                                 </connections>
                             </textField>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="lpZ-9y-Vfn">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="lpZ-9y-Vfn" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="14" y="47" width="191" height="18"/>
                                 <buttonCell key="cell" type="check" title="Enable VLC HTTP interface" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="Nby-oq-jkQ">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -662,7 +662,7 @@ Gw
                         <rect key="frame" x="4" y="5" width="556" height="101"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="2365">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="2365" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="14" y="73" width="194" height="18"/>
                                 <buttonCell key="cell" type="check" title="Enable Last.fm submissions" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="3472">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -974,7 +974,7 @@ Gw
                         </constraints>
                     </view>
                 </box>
-                <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="2331">
+                <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="2331" customClass="VLCRedesignBooleanControl">
                     <rect key="frame" x="18" y="372" width="105" height="18"/>
                     <buttonCell key="cell" type="check" title="Enable Audio" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="3457">
                         <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -1049,7 +1049,7 @@ Gw
         <customView translatesAutoresizingMaskIntoConstraints="NO" id="2440" userLabel="Video">
             <rect key="frame" x="0.0" y="0.0" width="582" height="572"/>
             <subviews>
-                <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="2448">
+                <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="2448" customClass="VLCRedesignBooleanControl">
                     <rect key="frame" x="18" y="535" width="106" height="18"/>
                     <buttonCell key="cell" type="check" title="Enable Video" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="3477">
                         <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -1065,7 +1065,7 @@ Gw
                         <rect key="frame" x="4" y="5" width="540" height="150"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="2452">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="2452" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="15" y="123" width="218" height="18"/>
                                 <buttonCell key="cell" type="check" title="Show video within main window" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="3479">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -1075,7 +1075,7 @@ Gw
                                     <action selector="videoSettingChanged:" target="-2" id="jdL-pA-9Ed"/>
                                 </connections>
                             </button>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="6yQ-ig-eP0">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="6yQ-ig-eP0" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="15" y="95" width="212" height="18"/>
                                 <buttonCell key="cell" type="check" title="Use classic video player layout" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="hMN-gu-1VU">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -1085,7 +1085,7 @@ Gw
                                     <action selector="videoSettingChanged:" target="-2" id="qef-S5-w02"/>
                                 </connections>
                             </button>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="2451">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="2451" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="15" y="11" width="111" height="18"/>
                                 <buttonCell key="cell" type="check" title="Always on top" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="3478">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -1095,7 +1095,7 @@ Gw
                                     <action selector="videoSettingChanged:" target="-2" id="m6x-T2-Ao2"/>
                                 </connections>
                             </button>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="rpy-5O-tek">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="rpy-5O-tek" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="15" y="67" width="281" height="18"/>
                                 <buttonCell key="cell" type="check" title="Pause the video playback when minimized" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="v2U-aI-gRI">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -1105,7 +1105,7 @@ Gw
                                     <action selector="videoSettingChanged:" target="-2" id="sk0-pw-9AE"/>
                                 </connections>
                             </button>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="4a1-oW-HKH">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="4a1-oW-HKH" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="15" y="39" width="267" height="18"/>
                                 <buttonCell key="cell" type="check" title="Resize interface to the native video size" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="rNV-hL-qNL">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -1115,7 +1115,7 @@ Gw
                                     <action selector="videoSettingChanged:" target="-2" id="Thc-PT-O88"/>
                                 </connections>
                             </button>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="3728">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="3728" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="268" y="11" width="150" height="18"/>
                                 <buttonCell key="cell" type="check" title="Window decorations" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="3729">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -1158,7 +1158,7 @@ Gw
                         <rect key="frame" x="4" y="5" width="540" height="104"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="5Db-fa-Ffw">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="5Db-fa-Ffw" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="14" y="76" width="133" height="18"/>
                                 <buttonCell key="cell" type="check" title="Start in fullscreen" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="dib-dQ-tMp">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -1168,7 +1168,7 @@ Gw
                                     <action selector="videoSettingChanged:" target="-2" id="9Dw-qx-0Eo"/>
                                 </connections>
                             </button>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="i5X-iK-Hbj">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="i5X-iK-Hbj" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="268" y="76" width="228" height="18"/>
                                 <buttonCell key="cell" type="check" title="Black screens in Fullscreen mode" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="mR8-Zk-i3R">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -1178,7 +1178,7 @@ Gw
                                     <action selector="videoSettingChanged:" target="-2" id="cL2-0Y-iKD"/>
                                 </connections>
                             </button>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="6mo-Qc-MZV">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="6mo-Qc-MZV" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="14" y="45" width="191" height="18"/>
                                 <buttonCell key="cell" type="check" title="Use native fullscreen mode" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="8UZ-lD-mnI">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -1406,7 +1406,7 @@ Gw
                                     <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
                                 </textFieldCell>
                             </textField>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" translatesAutoresizingMaskIntoConstraints="NO" id="2476">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" translatesAutoresizingMaskIntoConstraints="NO" id="2476" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="294" y="41" width="159" height="18"/>
                                 <buttonCell key="cell" type="check" title="Sequential numbering" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="3491">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -1615,7 +1615,7 @@ Gw
                                     <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
                                 </textFieldCell>
                             </textField>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="lem-yf-jZB">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="lem-yf-jZB" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="14" y="12" width="98" height="18"/>
                                 <buttonCell key="cell" type="check" title="Skip frames" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="lfl-mG-es8">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -1625,7 +1625,7 @@ Gw
                                     <action selector="inputSettingChanged:" target="-2" id="tI4-5J-NJ2"/>
                                 </connections>
                             </button>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="mFh-ke-4yF">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="mFh-ke-4yF" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="267" y="12" width="246" height="18"/>
                                 <buttonCell key="cell" type="check" title="Fast seek" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="XWc-M2-awg">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -1669,7 +1669,7 @@ Gw
                                     <action selector="inputSettingChanged:" target="-2" id="I6O-un-hHx"/>
                                 </connections>
                             </popUpButton>
-                            <button verticalHuggingPriority="751" translatesAutoresizingMaskIntoConstraints="NO" id="E3R-AI-QGD">
+                            <button verticalHuggingPriority="751" translatesAutoresizingMaskIntoConstraints="NO" id="E3R-AI-QGD" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="14" y="111" width="205" height="18"/>
                                 <buttonCell key="cell" type="check" title="Enable hardware acceleration" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="atu-5u-S8s">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -2081,7 +2081,7 @@ Gw
                                     <action selector="osdSettingChanged:" target="-2" id="Ng5-zQ-ywZ"/>
                                 </connections>
                             </slider>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" translatesAutoresizingMaskIntoConstraints="NO" id="3584">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" translatesAutoresizingMaskIntoConstraints="NO" id="3584" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="421" y="104" width="91" height="18"/>
                                 <buttonCell key="cell" type="check" title="Force Bold" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="3585">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -2234,7 +2234,7 @@ Gw
                         <rect key="frame" x="4" y="5" width="529" height="38"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="2526">
+                            <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="2526" customClass="VLCRedesignBooleanControl">
                                 <rect key="frame" x="14" y="10" width="98" height="18"/>
                                 <buttonCell key="cell" type="check" title="Enable OSD" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="3494">
                                     <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
@@ -2459,7 +2459,7 @@ Gw
                         <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
                     </textFieldCell>
                 </textField>
-                <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="6Ro-o1-WEd">
+                <button mirrorLayoutDirectionWhenInternationalizing="always" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="6Ro-o1-WEd" customClass="VLCRedesignBooleanControl">
                     <rect key="frame" x="18" y="19" width="229" height="18"/>
                     <buttonCell key="cell" type="check" title="Control playback with media keys" bezelStyle="regularSquare" imagePosition="left" alignment="left" inset="2" id="kZN-TJ-neV">
                         <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>

@@ -24,7 +24,15 @@ Item {
 
     ShortcutExt{ context: Qt.WindowShortcut; sequence:"Ctrl+O"; onActivated: DialogsProvider.simpleOpenDialog(); }
     ShortcutExt{ sequence:"Ctrl+Shift+O"; onActivated: DialogsProvider.openFileDialog(); }
-    ShortcutExt{ context: Qt.WindowShortcut; sequence:"Ctrl+F"; onActivated: DialogsProvider.PLOpenDir(); }
+    ShortcutExt {
+        context: Qt.WindowShortcut
+        sequence: "Ctrl+F"
+        // A transient Preferences editor can leave its QQuickView active.
+        // Keep its native Find action as the sole shortcut in that dialog.
+        enabled: MainCtx.useGlobalShortcuts && !DialogsProvider.prefsDialogVisible
+                 && !DialogsProvider.hotkeysDialogVisible
+        onActivated: DialogsProvider.PLOpenDir()
+    }
     ShortcutExt{ sequence:"Ctrl+D"; onActivated: DialogsProvider.openDiscDialog(); }
     ShortcutExt{ sequence:"Ctrl+N"; onActivated: DialogsProvider.openNetDialog(); }
     ShortcutExt{ sequence:"Ctrl+C"; onActivated: DialogsProvider.openCaptureDialog(); }
