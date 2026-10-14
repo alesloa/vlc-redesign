@@ -78,6 +78,7 @@ public:
     static void FileMenu( qt_intf_t *, QMenu * );
 
     static void ToolsMenu( qt_intf_t *, QMenu * );
+    static void ApplicationMenu( qt_intf_t *, QMenu * );
 
     static void ViewMenu(qt_intf_t *, QMenu *);
 

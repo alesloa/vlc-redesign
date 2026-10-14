@@ -68,12 +68,15 @@
 #include <QInputDialog>
 #include <QPointer>
 #include <QMessageBox>
+#include <QColorDialog>
+#include <QQmlEngine>
 
 #define I_OP_DIR_WINTITLE I_DIR_OR_FOLDER( N_("Open Directory"), \
                                            N_("Open Folder") )
 
 #define BASE_DIALOG(X) \
     X(prefsDialog) \
+    X(hotkeysDialog) \
     X(openDialog) \
     X(firstRunDialog) \
     X(extendedDialog) \
@@ -302,6 +305,63 @@ void DialogsProvider::prefsDialog()
     }
 }
 
+void DialogsProvider::hotkeysDialog()
+{
+    if( !m_hotkeysDialog )
+    {
+        m_hotkeysDialog = new PrefsDialog( nullptr, p_intf, true );
+        m_hotkeysDialog->installEventFilter( this );
+        m_hotkeysDialog->open();
+    }
+    else
+        m_hotkeysDialog->reject();
+}
+
+QVariantList DialogsProvider::settingsProfiles() const
+{
+    return SettingsProfilesDialog::profiles(p_intf);
+}
+
+QString DialogsProvider::currentSettingsProfile() const
+{
+    return SettingsProfilesDialog::currentProfile(p_intf);
+}
+
+void DialogsProvider::settingsProfileUpdated()
+{
+    if (SettingsProfilesDialog::updateCurrent(p_intf)) emit settingsProfilesChanged();
+}
+
+void DialogsProvider::settingsProfilesDialog(const QString &selectedId)
+{
+    if (!m_settingsProfilesDialog)
+    {
+        m_settingsProfilesDialog = new SettingsProfilesDialog(nullptr,p_intf,selectedId);
+        connect(m_settingsProfilesDialog,&SettingsProfilesDialog::profilesChanged,this,&DialogsProvider::settingsProfilesChanged);
+        connect(m_settingsProfilesDialog,&SettingsProfilesDialog::aboutToApply,this,[this]() {
+            // Switching the applied profile also discards any older staged
+            // preference editors, using their original Cancel paths.
+            if(m_prefsDialog) m_prefsDialog->reject();
+            if(m_hotkeysDialog) m_hotkeysDialog->reject();
+        });
+        m_settingsProfilesDialog->open();
+    }
+    else
+    {
+        m_settingsProfilesDialog->selectProfile(selectedId);
+        m_settingsProfilesDialog->show();
+        m_settingsProfilesDialog->raise();
+        m_settingsProfilesDialog->activateWindow();
+    }
+}
+
+void DialogsProvider::newSettingsProfileDialog()
+{
+    settingsProfilesDialog();
+    const QPointer<SettingsProfilesDialog> dialog=m_settingsProfilesDialog;
+    QMetaObject::invokeMethod(this,[dialog](){if(dialog) dialog->newProfile();},Qt::QueuedConnection);
+}
+
 void DialogsProvider::firstRunDialog()
 {
     ensureDialog(m_firstRunDialog);
@@ -317,6 +377,18 @@ void DialogsProvider::extendedDialog()
         m_extendedDialog->showTab( 0 );
     else
         m_extendedDialog->hide();
+}
+
+void DialogsProvider::audioEffectsDialog()
+{
+    ensureDialog(m_extendedDialog);
+    m_extendedDialog->showTab( ExtendedDialog::AUDIO_TAB );
+}
+
+void DialogsProvider::videoEffectsDialog()
+{
+    ensureDialog(m_extendedDialog);
+    m_extendedDialog->showTab( ExtendedDialog::VIDEO_TAB );
 }
 
 void DialogsProvider::synchroDialog()
@@ -494,6 +566,13 @@ void DialogsProvider::mediaCodecDialog()
         m_mediaInfoDialog->hide();
 }
 
+void DialogsProvider::statisticsDialog()
+{
+    ensureDialog(m_mediaInfoDialog);
+    // Reuse the current input's existing live statistics panel.
+    m_mediaInfoDialog->showTab( MediaInfoDialog::INPUTSTATS_PANEL );
+}
+
 QMessageBox::StandardButton DialogsProvider::messageDialog(const QString &text,
                                                            const QString &title,
                                                            const QMessageBox::StandardButtons buttons,
@@ -643,15 +722,57 @@ void DialogsProvider::openFileDialog()
 }
 void DialogsProvider::openDiscDialog()
 {
-    openDialog( OpenDialog::OPEN_DISC_TAB );
+    ensureDialog(m_openDialog);
+    m_openDialog->showTab(OpenDialog::OPEN_DISC_TAB,OpenDialog::OPEN_AND_PLAY,true);
 }
 void DialogsProvider::openNetDialog()
 {
-    openDialog( OpenDialog::OPEN_NETWORK_TAB );
+    MediaCollectionDialog dialog( p_intf, true );
+    if( dialog.exec() != QDialog::Accepted ) return;
+    const auto urls = dialog.mediaUrls();
+    if( urls.isEmpty() ) return;
+    const auto name = dialog.playlistName();
+    if( !name.isEmpty() && p_intf->p_mi->hasMediaLibrary() )
+    {
+        if( !m_collectionModel )
+        {
+            m_collectionModel = std::make_unique<MLPlaylistListModel>(this);
+            m_collectionModel->setMl( p_intf->p_mi->getMediaLibrary() );
+        }
+        m_collectionModel->create( name, urls );
+    }
+    else
+    {
+        QVector<vlc::playlist::Media> medias;
+        for( const auto &url : urls ) medias.append({url.toUrl().toString(QUrl::FullyEncoded), QString{}});
+        THEMPL->append( medias, true );
+    }
 }
+
+void DialogsProvider::newPlaylistDialog()
+{
+    if( !p_intf->p_mi->hasMediaLibrary() ) return;
+    MediaCollectionDialog dialog( p_intf, false );
+    if( dialog.exec() != QDialog::Accepted ) return;
+    if( !m_collectionModel )
+    {
+        m_collectionModel = std::make_unique<MLPlaylistListModel>(this);
+        m_collectionModel->setMl( p_intf->p_mi->getMediaLibrary() );
+    }
+    m_collectionModel->createWithCover( dialog.playlistName(), dialog.mediaUrls(), dialog.customCover() );
+}
+
+void DialogsProvider::addSubtitlesDialog( const QVariantList &media, const QString &title )
+{
+    if( !p_intf->p_mi->hasMediaLibrary() || media.isEmpty() ) return;
+    BulkSubtitleDialog dialog( p_intf, media, title );
+    dialog.exec();
+}
+
 void DialogsProvider::openCaptureDialog()
 {
-    openDialog( OpenDialog::OPEN_CAPTURE_TAB );
+    ensureDialog(m_openDialog);
+    m_openDialog->showTab(OpenDialog::OPEN_CAPTURE_TAB,OpenDialog::OPEN_AND_PLAY,true);
 }
 
 /* Same as the open one, but force the enqueue */
@@ -792,6 +913,39 @@ QString DialogsProvider::getDirectoryDialog( qt_intf_t *p_intf )
     free( uri );
 
     return dir;
+}
+
+void DialogsProvider::chooseColor(const QColor& initial, const QString& title,
+                                QObject* receiver, const QJSValue& callback)
+{
+    if (!receiver || !callback.isCallable())
+        return;
+    const QPointer<QObject> owner(receiver);
+    const QPointer<QJSEngine> engine(qjsEngine(receiver));
+    // Initial color/label are actual config metadata. Cancel has no callback,
+    // and a QML editor destroyed by the native modal loop cannot be accessed.
+    const QColor selected = QColorDialog::getColor(initial, nullptr, title);
+    if (owner && engine && selected.isValid())
+        callback.call({engine->toScriptValue(selected)});
+}
+
+void DialogsProvider::chooseDirectory(QObject* receiver, const QJSValue& callback)
+{
+    if (!receiver || !callback.isCallable())
+        return;
+    const QPointer<QObject> owner(receiver);
+    const QPointer<QJSEngine> engine(qjsEngine(receiver));
+    const QPointer<MainCtx> context(p_intf->p_mi);
+    // Use VLC's existing native file chooser, folder caption and remembered
+    // location. Library folders retain the selected file URL, not disc MRLs.
+    const QUrl selected = QFileDialog::getExistingDirectoryUrl(nullptr,
+        qfut(I_OP_DIR_WINTITLE), context ? context->getDialogFilePath() : QUrl(),
+        QFileDialog::ShowDirsOnly, {QStringLiteral("file")});
+    if (owner && engine && context && !selected.isEmpty())
+    {
+        context->setDialogFilePath(selected);
+        callback.call({engine->toScriptValue(selected)});
+    }
 }
 
 void DialogsProvider::PLOpenDir()

@@ -36,6 +36,7 @@
 #include <QScreen>
 #include <QActionGroup>
 #include <QAbstractProxyModel>
+#include <QPointer>
 
 namespace
 {
@@ -251,7 +252,6 @@ void QmlGlobalMenu::popup(QPoint pos)
         return;
 
     m_menu = std::make_unique<VLCMenu>(m_ctx->getIntf());
-    QMenu* submenu;
 
     connect( m_menu.get(), &QMenu::aboutToShow, this, [this]() {
         m_shown = true;
@@ -264,31 +264,7 @@ void QmlGlobalMenu::popup(QPoint pos)
         aboutToHide();
     });
 
-    submenu = m_menu->addMenu(qtr( "&Media" ));
-    FileMenu( p_intf, submenu );
-
-    /* Dynamic menus, rebuilt before being showed */
-    submenu = m_menu->addMenu(qtr( "P&layback" ));
-    NavigMenu( p_intf, submenu );
-
-    submenu = m_menu->addMenu(qtr( "&Audio" ));
-    AudioMenu( p_intf, submenu );
-
-    submenu = m_menu->addMenu(qtr( "&Video" ));
-    VideoMenu( p_intf, submenu );
-
-    submenu = m_menu->addMenu(qtr( "Subti&tle" ));
-    SubtitleMenu( p_intf, submenu );
-
-    submenu = m_menu->addMenu(qtr( "Tool&s" ));
-    ToolsMenu( p_intf, submenu );
-
-    /* View menu, a bit different */
-    submenu = m_menu->addMenu(qtr( "V&iew" ));
-    ViewMenu( p_intf, submenu );
-
-    submenu = m_menu->addMenu(qtr( "&Help" ));
-    HelpMenu( p_intf, submenu );
+    ApplicationMenu(p_intf, m_menu.get());
 
     m_menu->popup(pos);
 }
@@ -626,12 +602,20 @@ bool QmlMenuPositioner::eventFilter(QObject * object, QEvent * event)
     // Bookmarks
     if (m_ctx->hasMediaLibrary())
     {
-	m_menu->addAction(qtr("&Manage"), THEDP, &DialogsProvider::bookmarksDialog )->setShortcut(QKeySequence("Ctrl+B"));
-        m_menu->addSeparator();
-
         MLBookmarkModel * bookmarks = new MLBookmarkModel(m_menu.get());
         bookmarks->setPlayer(m_player->getPlayer());
         bookmarks->setMl(m_ctx->getMediaLibrary());
+
+        // The walkthrough's Ctrl+B action uses the existing MLGlobalShortcuts.
+        // Show that existing binding here without registering an ambiguous
+        // second shortcut while this native popup is open.
+        auto addBookmark = m_menu->addAction(qtr("&Add") + QLatin1Char('\t') +
+            QKeySequence(QStringLiteral("Ctrl+B")).toString(QKeySequence::NativeText));
+        addBookmark->setObjectName(QStringLiteral("quickBookmarkAdd"));
+        addBookmark->setEnabled(m_player->isStarted() && m_player->getTime().valid());
+        connect(addBookmark, &QAction::triggered, bookmarks, &MLBookmarkModel::add);
+        m_menu->addAction(qtr("&Manage"), THEDP, &DialogsProvider::bookmarksDialog);
+        m_menu->addSeparator();
 
         helper = new ListMenuHelper(m_menu.get(), bookmarks, nullptr, m_menu.get());
 
@@ -846,6 +830,30 @@ void PlaylistListContextMenu::popup(const QModelIndexList & selected, QPoint pos
         ml->addToPlaylist(ids);
     });
 
+    QVariantList subtitleIds;
+    QString subtitleTitle;
+    if (ml)
+        for (const QModelIndex &index : selected)
+        {
+            const QVariant value = m_model->data(index, MLPlaylistListModel::PLAYLIST_ID);
+            if (!value.canConvert<MLItemId>() || value.value<MLItemId>().id <= 0 ||
+                m_model->data(index, MLPlaylistListModel::PLAYLIST_NB_VIDEO).toInt() <= 0)
+                continue;
+            subtitleIds.push_back(value);
+            subtitleTitle = m_model->data(index, MLPlaylistListModel::PLAYLIST_NAME).toString();
+        }
+    if (!subtitleIds.isEmpty())
+    {
+        // Caption: Figma's Add Subtitles workflow. Targets and title are the
+        // actual selected library records, never inferred file types or names.
+        action = menu->addAction(qtr("Add Subtitles"));
+        if (subtitleIds.size() != 1)
+            subtitleTitle.clear();
+        connect(action, &QAction::triggered, this, [subtitleIds, subtitleTitle]() {
+            DialogsProvider::getInstance()->addSubtitlesDialog(subtitleIds, subtitleTitle);
+        });
+    }
+
     if (ids.count() == 1)
     {
         action = menu->addAction(qtr("Rename"));
@@ -903,6 +911,29 @@ void PlaylistMediaContextMenu::popup(const QModelIndexList & selected, QPoint po
     connect(action, &QAction::triggered, [ids]() {
         DialogsProvider::getInstance()->playlistsDialog(ids);
     });
+
+    QVariantList subtitleIds;
+    QString subtitleTitle;
+    if (ml)
+        for (const QModelIndex &index : selected)
+        {
+            const QVariant value = m_model->data(index, MLPlaylistModel::MEDIA_ID);
+            if (!value.canConvert<MLItemId>() || value.value<MLItemId>().id <= 0 ||
+                !m_model->data(index, MLPlaylistModel::MEDIA_IS_VIDEO).toBool())
+                continue;
+            subtitleIds.push_back(value);
+            subtitleTitle = m_model->data(index, MLPlaylistModel::MEDIA_TITLE).toString();
+        }
+    if (!subtitleIds.isEmpty())
+    {
+        // Figma action; video eligibility, IDs and title are model data.
+        action = menu->addAction(qtr("Add Subtitles"));
+        if (subtitleIds.size() != 1)
+            subtitleTitle.clear();
+        connect(action, &QAction::triggered, this, [subtitleIds, subtitleTitle]() {
+            DialogsProvider::getInstance()->addSubtitlesDialog(subtitleIds, subtitleTitle);
+        });
+    }
 
     action = menu->addAction(qtr("Play as audio"));
 
@@ -1059,19 +1090,42 @@ void PlaylistContextMenu::popup(int selectedIndex, QPoint pos )
     m_menu = std::make_unique<VLCMenu>(m_ctx->getIntf());
     QAction* action;
 
+    const auto sourceRow = [this](int row) {
+        if (!m_proxyModel)
+            return row >= 0 && row < m_model->rowCount() ? row : -1;
+        if (m_proxyModel->sourceModel() != m_model || row < 0 || row >= m_proxyModel->rowCount())
+            return -1;
+        const auto source = m_proxyModel->mapToSource(m_proxyModel->index(row, 0));
+        return source.isValid() && source.row() < m_model->rowCount() ? source.row() : -1;
+    };
+    QVector<PlaylistItem> selectedItems;
     QList<QUrl> selectedUrlList;
     for (const int modelIndex : m_selectionModel->selectedIndexesFlat())
-        selectedUrlList.push_back(m_model->itemAt(modelIndex).getUrl());
+    {
+        const int row = sourceRow(modelIndex);
+        if (row < 0)
+            continue;
+        const auto item = m_model->itemAt(row);
+        if (!item)
+            continue;
+        selectedItems.push_back(item);
+        selectedUrlList.push_back(item.getUrl());
+    }
 
     PlaylistItem selectedItem;
-    if (selectedIndex >= 0)
-        selectedItem = m_model->itemAt(selectedIndex);
+    // PlaylistDelegate supplies its mapped source row for the clicked item;
+    // only the selection model's rows belong to the search proxy.
+    const int selectedSourceRow = selectedIndex >= 0 && selectedIndex < m_model->rowCount() ? selectedIndex : -1;
+    if (selectedSourceRow >= 0)
+        selectedItem = m_model->itemAt(selectedSourceRow);
 
     if (selectedItem)
     {
         action = m_menu->addAction( qtr("Play") );
-        connect(action, &QAction::triggered, [this, selectedIndex]( ) {
-            m_controler->goTo(selectedIndex, true);
+        connect(action, &QAction::triggered, m_controler,
+                [controller = QPointer<vlc::playlist::PlaylistController>(m_controler), selectedItem]( ) {
+            if (controller)
+                controller->goToItem(selectedItem, true);
         });
 
         m_menu->addSeparator();
@@ -1083,7 +1137,7 @@ void PlaylistContextMenu::popup(int selectedIndex, QPoint pos )
         connect(action, &QAction::triggered, this, &PlaylistContextMenu::jumpToCurrentPlaying);
     }
 
-    if (m_selectionModel->hasSelection()) {
+    if (!selectedItems.isEmpty()) {
         action = m_menu->addAction( qtr("Stream") );
         connect(action, &QAction::triggered, [selectedUrlList]( ) {
             DialogsProvider::getInstance()->streamingDialog(selectedUrlList, false);
@@ -1136,7 +1190,7 @@ void PlaylistContextMenu::popup(int selectedIndex, QPoint pos )
 
     m_menu->addSeparator();
 
-    if (m_selectionModel->hasSelection())
+    if (!selectedItems.isEmpty())
     {
         action = m_menu->addAction( qtr("Save Play Queue to File...") );
         connect(action, &QAction::triggered, []( ) {
@@ -1147,8 +1201,10 @@ void PlaylistContextMenu::popup(int selectedIndex, QPoint pos )
 
         action = m_menu->addAction( qtr("Remove Selected") );
         action->setIcon(QIcon(":/menu/remove.svg"));
-        connect(action, &QAction::triggered, [this]( ) {
-            m_model->removeItems(m_selectionModel->selectedIndexesFlat());
+        connect(action, &QAction::triggered, m_controler,
+                [controller = QPointer<vlc::playlist::PlaylistController>(m_controler), selectedItems]( ) {
+            if (controller)
+                controller->remove(selectedItems, -1);
         });
     }
 
@@ -1185,7 +1241,7 @@ void PlaylistContextMenu::popup(int selectedIndex, QPoint pos )
         {
             const QVariantMap varmap = it.toMap();
 
-            auto key = static_cast<PlaylistController::SortKey>(varmap.value("key").toInt());
+            auto key = static_cast<PlaylistController::SortKey>(varmap.value("criteria").toInt());
             QString label = varmap.value("text").toString();
 
             addSortAction(qtr("%1 Ascending").arg(label), key, PlaylistController::SORT_ORDER_ASC);
@@ -1207,7 +1263,15 @@ void PlaylistContextMenu::popup(int selectedIndex, QPoint pos )
                 // Actions that are available when the view uses a proxy model:
 
                 action = m_menu->addAction( qtr("Discard the filtered out items"));
-                connect(action, &QAction::triggered, [this]( ) {
+                connect(action, &QAction::triggered, this,
+                        [self = QPointer<PlaylistContextMenu>(this), source = QPointer<PlaylistListModel>(m_model),
+                         proxy = QPointer<QAbstractProxyModel>(m_proxyModel), controller = QPointer<PlaylistController>(m_controler)] {
+                    if (!self || !source || !proxy || !controller || proxy->sourceModel() != source)
+                        return;
+                    QVector<PlaylistItem> hiddenItems;
+                    for (int row = 0; row < source->rowCount(); ++row)
+                        if (!proxy->mapFromSource(source->index(row, 0)).isValid())
+                            hiddenItems.push_back(source->itemAt(row));
                     bool proceed = true;
 
                     if (const auto dp = DialogsProvider::getInstance())
@@ -1216,28 +1280,10 @@ void PlaylistContextMenu::popup(int selectedIndex, QPoint pos )
                                                      QStringLiteral("Do you really want to discard the items that are not displayed at the moment?"));
                     }
 
-                    const auto count = m_model->rowCount() - m_proxyModel->rowCount();
-
-                    if (proceed && (count > 0))
+                    if (proceed && self && source && proxy && controller && !hiddenItems.isEmpty())
                     {
-                        QList<int> items;
-                        items.reserve(count);
-
-                        for (int i = 0; i < m_model->rowCount(); ++i)
-                        {
-                            const auto mappedIndex = m_proxyModel->mapFromSource(m_model->index(i, 0));
-
-                            if (!mappedIndex.isValid() || !(m_proxyModel->checkIndex(mappedIndex, QAbstractItemModel::CheckIndexOption::IndexIsValid)))
-                            {
-                                items.push_back(i);
-                            }
-                        }
-
-                        if (items.count() > 0)
-                        {
-                            m_model->removeItems(items);
-                            emit discardedFilteredOutItems();
-                        }
+                        controller->remove(hiddenItems, -1);
+                        emit self->discardedFilteredOutItems();
                     }
                 });
             }

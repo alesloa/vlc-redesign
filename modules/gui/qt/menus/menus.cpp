@@ -40,6 +40,8 @@
 #include "maininterface/mainctx.hpp"                     /* View modifications */
 #include "maininterface/mainctx_submodels.hpp"
 #include "dialogs/dialogs_provider.hpp"                   /* Dialogs display */
+#include "dialogs/toolbar/controlbar_profile_model.hpp"
+#include "dialogs/toolbar/controlbar_profile.hpp"
 #include "dialogs/help/help.hpp"
 #include "player/player_controller.hpp"                      /* Input Management */
 #include "playlist/playlist_controller.hpp"
@@ -58,6 +60,9 @@
 #include <QMenuBar>
 #include <QAction>
 #include <QActionGroup>
+#include <QIconEngine>
+#include <QPainter>
+#include <QPointer>
 #include <QSignalMapper>
 
 using namespace vlc::playlist;
@@ -73,6 +78,59 @@ using namespace vlc::playlist;
   */
 
 RendererMenu *VLCMenuBar::rendererMenu = NULL;
+
+// Keep the original Figma vectors intact. Theme tint and the design's flip-x
+// wrappers belong to rendering, and follow the current menu palette.
+class RedesignMenuIconEngine final : public QIconEngine
+{
+public:
+    RedesignMenuIconEngine(QString file, QMenu *menu, bool mirrored)
+        : m_file(std::move(file)), m_menu(menu), m_mirrored(mirrored) {}
+
+    QIconEngine *clone() const override
+    {
+        return new RedesignMenuIconEngine(m_file, m_menu, m_mirrored);
+    }
+
+    void paint(QPainter *painter, const QRect &rect, QIcon::Mode mode,
+               QIcon::State state) override
+    {
+        const auto palette = m_menu ? m_menu->palette() : QPalette();
+        const auto group = mode == QIcon::Disabled ? QPalette::Disabled : QPalette::Active;
+        const auto role = mode == QIcon::Selected ? QPalette::BrightText : QPalette::Text;
+        const auto color = palette.color(group, role).name(QColor::HexRgb);
+        const ColorizedSvgIcon icon(m_file, {}, {}, {},
+            {{QStringLiteral("#8F8F8F"), color}});
+        painter->save();
+        if (m_mirrored)
+        {
+            painter->translate(rect.left() + rect.right() + 1, 0);
+            painter->scale(-1, 1);
+        }
+        icon.paint(painter, rect, Qt::AlignCenter, QIcon::Normal, state);
+        painter->restore();
+    }
+
+    QPixmap pixmap(const QSize &size, QIcon::Mode mode, QIcon::State state) override
+    {
+        QPixmap result(size);
+        result.fill(Qt::transparent);
+        QPainter painter(&result);
+        paint(&painter, QRect(QPoint(), size), mode, state);
+        return result;
+    }
+
+private:
+    QString m_file;
+    QPointer<QMenu> m_menu;
+    bool m_mirrored;
+};
+
+static QIcon redesignMenuIcon(QMenu *menu, const QString &file, bool mirrored = false)
+{
+    return QIcon(new RedesignMenuIconEngine(QStringLiteral(":/redesign/icons/") + file,
+                                          menu, mirrored));
+}
 
 /**
  * @brief Add static entries to DP in menus
@@ -199,6 +257,7 @@ void VLCMenuBar::FileMenu(qt_intf_t *p_intf, QMenu *menu)
         recentModel->setMl(mi->getMediaLibrary());
         recentModel->setLimit(10);
         QMenu* recentsMenu = new RecentMenu(recentModel, mi->getMediaLibrary(), menu);
+        recentsMenu->setObjectName(QStringLiteral("recentMediaMenu"));
         recentsMenu->setTitle(qtr( "Open &Recent Media" ) );
         recentModel->setParent(recentsMenu);
         menu->addMenu( recentsMenu );
@@ -235,6 +294,120 @@ void VLCMenuBar::FileMenu(qt_intf_t *p_intf, QMenu *menu)
         ":/menu/exit.svg", &DialogsProvider::quit, "Ctrl+Q" );
 }
 
+// Figma 6062:13354 promotes the existing opening/settings actions into the
+// application menu. Reuse the same QAction objects and shortcuts so each
+// command keeps exactly one handler, including inside the full Media menu.
+void VLCMenuBar::ApplicationMenu(qt_intf_t *p_intf, QMenu *menu)
+{
+    auto mediaMenu = new QMenu(qtr("&Media"), menu);
+    FileMenu(p_intf, mediaMenu);
+    const auto actions = mediaMenu->actions();
+    const char *icons[] = {"menu-file.svg", "menu-file.svg", "menu-folder.svg",
+                           "menu-disc.svg", "menu-network.svg", "menu-capture.svg"};
+    for (int row = 0; row < 6 && row < actions.size(); ++row)
+        actions[row]->setIcon(redesignMenuIcon(menu, QLatin1String(icons[row]), row == 2 || row == 4));
+    for (int row : {0, 2, 4, 3, 5})
+        if (row < actions.size())
+            menu->addAction(actions[row]);
+    QAction *convert = nullptr;
+    QAction *recent = nullptr;
+    for (auto action : actions)
+    {
+        if (action->shortcut() == QKeySequence(QStringLiteral("Ctrl+R")))
+        {
+            action->setIcon(redesignMenuIcon(menu, QStringLiteral("menu-convert.svg"), true));
+            convert = action;
+        }
+        else if (action->menu() && action->menu()->objectName() == QStringLiteral("recentMediaMenu"))
+        {
+            action->setIcon(redesignMenuIcon(menu, QStringLiteral("menu-recent.svg"), true));
+            recent = action;
+        }
+    }
+    for (auto action : {convert, recent})
+        if (action)
+            menu->addAction(action);
+    menu->addSeparator();
+    // Source: Figma's global Profile menu and the provider's actual user-named
+    // settings snapshots. Existing toolbar layouts remain in Customize Player.
+    if (auto provider = DialogsProvider::getInstance())
+    {
+        const auto profiles = provider->settingsProfiles();
+        const QString currentId = provider->currentSettingsProfile();
+        QString currentName;
+        for (const auto &value : profiles)
+        {
+            const auto profile = value.toMap();
+            if (profile.value(QStringLiteral("id")).toString() == currentId)
+                currentName = profile.value(QStringLiteral("name")).toString();
+        }
+        auto profileMenu = menu->addMenu(currentName.isEmpty() ? qtr("Profile") :
+            qtr("Profile (%1)").arg(currentName.replace(QLatin1Char('&'), QStringLiteral("&&"))));
+        profileMenu->setIcon(redesignMenuIcon(menu, QStringLiteral("menu-profile.svg")));
+        profileMenu->setObjectName(QStringLiteral("settingsProfilesMenu"));
+        auto group = new QActionGroup(profileMenu);
+        group->setExclusive(true);
+        for (const auto &value : profiles)
+        {
+            const auto profile = value.toMap();
+            const QString id = profile.value(QStringLiteral("id")).toString();
+            const QString name = profile.value(QStringLiteral("name")).toString();
+            if (id.isEmpty() || name.isEmpty())
+                continue;
+            auto action = profileMenu->addAction(QString(name).replace(QLatin1Char('&'), QStringLiteral("&&")));
+            action->setCheckable(true);
+            action->setChecked(id == currentId);
+            group->addAction(action);
+            connect(action, &QAction::triggered, provider,
+                    [providerGuard = QPointer<DialogsProvider>(provider), actionGuard = QPointer<QAction>(action), id] {
+                if (!providerGuard)
+                    return;
+                providerGuard->settingsProfilesDialog(id);
+                if (providerGuard && actionGuard)
+                    actionGuard->setChecked(id == providerGuard->currentSettingsProfile());
+            });
+        }
+        if (!profiles.isEmpty())
+            profileMenu->addSeparator();
+        auto create = profileMenu->addAction(qtr("New"), provider, &DialogsProvider::newSettingsProfileDialog);
+        create->setObjectName(QStringLiteral("newSettingsProfile"));
+    }
+    auto toolsMenu = new QMenu(qtr("Tools"), menu);
+    ToolsMenu(p_intf, toolsMenu);
+    auto helpMenu = new QMenu(qtr("Help"), menu);
+    HelpMenu(p_intf, helpMenu);
+    auto promote = [menu](QMenu *source, const QString &id, const QString &label, const QString &icon) {
+        for (auto action : source->actions())
+            if (action->objectName() == id)
+            {
+                action->setText(label);
+                action->setIcon(redesignMenuIcon(menu, icon, icon == QStringLiteral("menu-customize.svg")));
+                menu->addAction(action);
+                return;
+            }
+    };
+    promote(toolsMenu, QStringLiteral("hotkeys"), qtr("Keyboard Shortcuts"), QStringLiteral("menu-hotkeys.svg"));
+    promote(toolsMenu, QStringLiteral("toolbarEditor"), qtr("Customize Player"), QStringLiteral("menu-customize.svg"));
+    promote(toolsMenu, QStringLiteral("preferences"), qtr("Settings"), QStringLiteral("menu-settings.svg"));
+    promote(helpMenu, QStringLiteral("about"), qtr("About VLC"), QStringLiteral("menu-about.svg"));
+
+    // Remaining source actions stay reachable through their existing menus.
+    auto more = menu->addMenu(qtr("More Settings"));
+    more->addMenu(mediaMenu);
+    auto add = [&](const QString &title, void (*populate)(qt_intf_t *, QMenu *)) {
+        auto submenu = more->addMenu(title);
+        populate(p_intf, submenu);
+    };
+    add(qtr("Playback"), &VLCMenuBar::NavigMenu);
+    add(qtr("Audio"), &VLCMenuBar::AudioMenu);
+    add(qtr("Video"), &VLCMenuBar::VideoMenu);
+    auto subtitles = more->addMenu(qtr("Subtitle"));
+    SubtitleMenu(p_intf, subtitles);
+    more->addMenu(toolsMenu);
+    add(qtr("View"), &VLCMenuBar::ViewMenu);
+    more->addMenu(helpMenu);
+}
+
 /**
  * Tools, like Media Information, Preferences or Messages
  **/
@@ -269,10 +442,12 @@ void VLCMenuBar::ToolsMenu( qt_intf_t *p_intf, QMenu *menu )
 
     if( !p_intf->b_isDialogProvider )
         addDPStaticEntry( menu, qtr( "Customi&ze Interface..." ),
-            ":/menu/preferences.svg", &DialogsProvider::showToolbarEditorDialog);
+            ":/menu/preferences.svg", &DialogsProvider::showToolbarEditorDialog)->setObjectName(QStringLiteral("toolbarEditor"));
 
     addDPStaticEntry( menu, qtr( "&Preferences" ),
-        ":/menu/preferences.svg", &DialogsProvider::prefsDialog, "Ctrl+P", QAction::PreferencesRole );
+        ":/menu/preferences.svg", &DialogsProvider::prefsDialog, "Ctrl+P", QAction::PreferencesRole )->setObjectName(QStringLiteral("preferences"));
+    addDPStaticEntry( menu, qtr( "Hotkeys" ),
+        ":/redesign/icons/settings-controls.svg", &DialogsProvider::hotkeysDialog )->setObjectName(QStringLiteral("hotkeys"));
 }
 
 /**
@@ -567,7 +742,7 @@ void VLCMenuBar::HelpMenu(qt_intf_t *p_intf, QMenu *menu )
 #endif
     menu->addSeparator();
     addDPStaticEntry( menu, qfut( I_MENU_ABOUT ), ":/menu/info.svg",
-            &DialogsProvider::aboutDialog, "Shift+F1", QAction::AboutRole );
+            &DialogsProvider::aboutDialog, "Shift+F1", QAction::AboutRole )->setObjectName(QStringLiteral("about"));
 }
 
 /*****************************************************************************

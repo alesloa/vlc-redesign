@@ -45,6 +45,8 @@
 #include <QObject>
 #include <QStringList>
 #include <QMessageBox>
+#include <QColor>
+#include <QJSValue>
 
 #include <vlc_es.h>
 
@@ -74,6 +76,7 @@ class QSignalMapper;
 class VLCMenuBar;
 
 class OpenDialog;
+class MLPlaylistListModel;
 class FirstRunWizard;
 class ExtendedDialog;
 class MessagesDialog;
@@ -89,6 +92,7 @@ class PluginDialog;
 class EpgDialog;
 class UpdateDialog;
 class PrefsDialog;
+class SettingsProfilesDialog;
 
 class DialogsProvider : public QObject, public Singleton<DialogsProvider>
 {
@@ -119,6 +123,9 @@ public:
     Q_PROPERTY(bool pluginDialogVisible READ pluginDialogVisible NOTIFY pluginDialogVisibleChanged FINAL)
     Q_PROPERTY(bool egpDialogVisible READ egpDialogVisible NOTIFY egpDialogVisibleChanged FINAL)
     Q_PROPERTY(bool prefsDialogVisible READ prefsDialogVisible NOTIFY prefsDialogVisibleChanged FINAL)
+    Q_PROPERTY(bool hotkeysDialogVisible READ hotkeysDialogVisible NOTIFY hotkeysDialogVisibleChanged FINAL)
+    Q_PROPERTY(QVariantList settingsProfiles READ settingsProfiles NOTIFY settingsProfilesChanged FINAL)
+    Q_PROPERTY(QString currentSettingsProfile READ currentSettingsProfile NOTIFY settingsProfilesChanged FINAL)
 #ifdef UPDATE_CHECK
     Q_PROPERTY(bool updateDialogVisible READ updateDialogVisible NOTIFY updateDialogVisibleChanged FINAL)
 #endif
@@ -171,8 +178,11 @@ private:
     std::unique_ptr<QMenu> miscPopupMenu;
 
     QPointer<PrefsDialog> m_prefsDialog;
+    QPointer<PrefsDialog> m_hotkeysDialog;
+    QPointer<SettingsProfilesDialog> m_settingsProfilesDialog;
 
     std::unique_ptr<OpenDialog> m_openDialog;
+    std::unique_ptr<MLPlaylistListModel> m_collectionModel;
     std::unique_ptr<FirstRunWizard> m_firstRunDialog;
     std::unique_ptr<ExtendedDialog> m_extendedDialog;
     std::unique_ptr<MessagesDialog> m_messagesDialog;
@@ -209,6 +219,7 @@ public slots:
     void mediaInfoDialog( const PlaylistItem& pItem );
     void mediaInfoDialog( const MLItemId& itemId );
     void mediaCodecDialog();
+    void statisticsDialog();
     bool questionDialog(const QString& text, const QString& title = {}) const;
     QMessageBox::StandardButton messageDialog(const QString& text,
                                               const QString& title = {},
@@ -216,8 +227,14 @@ public slots:
                                               const QMessageBox::StandardButton defaultButton = QMessageBox::NoButton,
                                               const QMessageBox::Icon icon = QMessageBox::NoIcon);
     void prefsDialog();
+    void hotkeysDialog();
+    void settingsProfilesDialog(const QString &selectedId = QString());
+    void newSettingsProfileDialog();
+    void settingsProfileUpdated();
     void firstRunDialog();
     void extendedDialog();
+    void audioEffectsDialog();
+    void videoEffectsDialog();
     void synchroDialog();
     void messagesDialog( int page = 0 );
     void sendKey( int key );
@@ -239,12 +256,17 @@ public slots:
     void openFileGenericDialog( intf_dialog_args_t * );
 
     void simpleOpenDialog( bool start = true );
+    void chooseColor( const QColor &initial, const QString &title,
+                      QObject *receiver, const QJSValue &callback );
+    void chooseDirectory( QObject *receiver, const QJSValue &callback );
 
     void openDialog();
     void openDiscDialog();
     void openFileDialog();
     void openUrlDialog();
     void openNetDialog();
+    void newPlaylistDialog();
+    void addSubtitlesDialog( const QVariantList &media, const QString &title = QString() );
     void openCaptureDialog();
 
     void PLOpenDir();
@@ -281,6 +303,9 @@ public:
     bool pluginDialogVisible() const;
     bool egpDialogVisible() const;
     bool prefsDialogVisible() const;
+    bool hotkeysDialogVisible() const;
+    QVariantList settingsProfiles() const;
+    QString currentSettingsProfile() const;
 #ifdef UPDATE_CHECK
     bool updateDialogVisible() const;
 #endif
@@ -304,6 +329,8 @@ signals:
     void pluginDialogVisibleChanged();
     void egpDialogVisibleChanged();
     void prefsDialogVisibleChanged();
+    void hotkeysDialogVisibleChanged();
+    void settingsProfilesChanged();
 #ifdef UPDATE_CHECK
     void updateDialogVisibleChanged();
 #endif

@@ -414,13 +414,20 @@ RecentMenu::RecentMenu(MLRecentMediaModel* model, MediaLib* ml,  QWidget* parent
 BookmarkMenu::BookmarkMenu(MediaLib * mediaLib, vlc_player_t * player, QWidget * parent)
     : QMenu(parent)
 {
-    addAction(qtr("&Manage"), THEDP, &DialogsProvider::bookmarksDialog )->setShortcut(QKeySequence("Ctrl+B"));
-
-    addSeparator();
-
     MLBookmarkModel * model = new MLBookmarkModel(this);
     model->setPlayer(player);
     model->setMl(mediaLib);
+
+    auto addBookmark = addAction(qtr("&Add") + QLatin1Char('\t') +
+        QKeySequence(QStringLiteral("Ctrl+B")).toString(QKeySequence::NativeText));
+    addBookmark->setObjectName(QStringLiteral("quickBookmarkAdd"));
+    {
+        vlc_player_locker lock{player};
+        addBookmark->setEnabled(vlc_player_IsStarted(player) && vlc_player_GetTime(player) != VLC_TICK_INVALID);
+    }
+    connect(addBookmark, &QAction::triggered, model, &MLBookmarkModel::add);
+    addAction(qtr("&Manage"), THEDP, &DialogsProvider::bookmarksDialog);
+    addSeparator();
 
     ListMenuHelper * helper = new ListMenuHelper(this, model, nullptr, this);
 

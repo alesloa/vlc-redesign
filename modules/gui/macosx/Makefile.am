@@ -79,6 +79,7 @@ libmacosx_plugin_la_LDFLAGS = $(AM_LDFLAGS) $(gui_RPATH) \
 	-Wl,-framework,AVFoundation \
 	-Wl,-framework,Cocoa \
 	-Wl,-framework,CoreAudio \
+	-Wl,-framework,CoreText \
 	-Wl,-framework,CoreGraphics \
 	-Wl,-framework,CoreVideo \
 	-Wl,-framework,IOKit \
@@ -182,6 +183,10 @@ libmacosx_plugin_la_SOURCES = \
 	gui/macosx/library/VLCLibraryCollectionViewSupplementaryElementView.m \
 	gui/macosx/library/VLCLibraryController.h \
 	gui/macosx/library/VLCLibraryController.m \
+	gui/macosx/library/VLCLibrarySubtitleMappingController.h \
+	gui/macosx/library/VLCLibrarySubtitleMappingController.m \
+	gui/macosx/library/VLCLibraryMediaCollectionController.h \
+	gui/macosx/library/VLCLibraryMediaCollectionController.m \
 	gui/macosx/library/VLCLibraryConnectableDataSource.h \
 	gui/macosx/library/VLCLibraryDataSource.h \
 	gui/macosx/library/VLCLibraryDataTypes.h \
@@ -209,6 +214,8 @@ libmacosx_plugin_la_SOURCES = \
 	gui/macosx/library/VLCLibraryModel.m \
 	gui/macosx/library/VLCLibraryModelChangeDelegate.h \
 	gui/macosx/library/VLCLibraryModelChangeDelegate.m \
+	gui/macosx/library/VLCLibraryNavigationData.h \
+	gui/macosx/library/VLCLibraryNavigationData.m \
 	gui/macosx/library/VLCLibraryRepresentedItem.h \
 	gui/macosx/library/VLCLibraryRepresentedItem.m \
 	gui/macosx/library/VLCLibrarySegment.h \
@@ -234,6 +241,10 @@ libmacosx_plugin_la_SOURCES = \
 	gui/macosx/library/VLCLibraryWindowController.m \
 	gui/macosx/library/VLCLibraryWindowAbstractSidebarViewController.h \
 	gui/macosx/library/VLCLibraryWindowAbstractSidebarViewController.m \
+	gui/macosx/library/VLCLibraryWindowBookmarksSidebarViewController.h \
+	gui/macosx/library/VLCLibraryWindowBookmarksSidebarViewController.m \
+	gui/macosx/library/VLCCompactLibraryViewController.h \
+	gui/macosx/library/VLCCompactLibraryViewController.m \
 	gui/macosx/library/VLCLibraryWindowChaptersSidebarViewController.h \
 	gui/macosx/library/VLCLibraryWindowChaptersSidebarViewController.m \
 	gui/macosx/library/VLCLibraryWindowNavigationSidebarOutlineView.h \
@@ -451,8 +462,16 @@ libmacosx_plugin_la_SOURCES = \
 	gui/macosx/playqueue/VLCPlayQueueTableView.m \
 	gui/macosx/preferences/VLCHotkeyChangeWindow.h \
 	gui/macosx/preferences/VLCHotkeyChangeWindow.m \
+	gui/macosx/preferences/VLCHotkeyWindowController.h \
+	gui/macosx/preferences/VLCHotkeyWindowController.m \
+	gui/macosx/preferences/VLCSettingsProfileManager.h \
+	gui/macosx/preferences/VLCSettingsProfileManager.m \
+	gui/macosx/preferences/VLCSettingsProfileWindowController.h \
+	gui/macosx/preferences/VLCSettingsProfileWindowController.m \
 	gui/macosx/preferences/VLCSimplePrefsController.h \
 	gui/macosx/preferences/VLCSimplePrefsController.m \
+	gui/macosx/preferences/VLCInlineAdvancedPreferences.h \
+	gui/macosx/preferences/VLCInlineAdvancedPreferences.m \
 	gui/macosx/preferences/VLCSimplePrefsWindow.h \
 	gui/macosx/preferences/VLCSimplePrefsWindow.m \
 	gui/macosx/preferences/prefs.h \
@@ -494,6 +513,10 @@ libmacosx_plugin_la_SOURCES = \
 	gui/macosx/views/VLCPlaybackProgressSlider.m \
 	gui/macosx/views/VLCPlaybackProgressSliderCell.h \
 	gui/macosx/views/VLCPlaybackProgressSliderCell.m \
+	gui/macosx/views/VLCPlayerStatisticsView.h \
+	gui/macosx/views/VLCPlayerStatisticsView.m \
+	gui/macosx/views/VLCPlayerEffectsView.h \
+	gui/macosx/views/VLCPlayerEffectsView.m \
 	gui/macosx/views/VLCRoundedCornerTextField.h \
 	gui/macosx/views/VLCRoundedCornerTextField.m \
 	gui/macosx/views/VLCScrollingClipView.h \
@@ -516,6 +539,8 @@ libmacosx_plugin_la_SOURCES = \
 	gui/macosx/views/VLCTrackingView.m \
 	gui/macosx/views/VLCUIUnits.h \
 	gui/macosx/views/VLCUIUnits.m \
+	gui/macosx/views/VLCRedesignBooleanControl.h \
+	gui/macosx/views/VLCRedesignBooleanControl.m \
 	gui/macosx/views/VLCVolumeSlider.h \
 	gui/macosx/views/VLCVolumeSlider.m \
 	gui/macosx/views/VLCVolumeSliderCell.h \
@@ -556,6 +581,12 @@ libmacosx_plugin_la_SOURCES = \
 	gui/macosx/windows/controlsbar/VLCControlsBarCommon.m \
 	gui/macosx/windows/controlsbar/VLCMainVideoViewControlsBar.h \
 	gui/macosx/windows/controlsbar/VLCMainVideoViewControlsBar.m \
+	gui/macosx/windows/controlsbar/VLCPlayerToolbarEditorController.h \
+	gui/macosx/windows/controlsbar/VLCPlayerToolbarEditorController.m \
+	gui/macosx/windows/controlsbar/VLCPlayerPresetManager.h \
+	gui/macosx/windows/controlsbar/VLCPlayerPresetManager.m \
+	gui/macosx/windows/controlsbar/VLCSleepTimer.h \
+	gui/macosx/windows/controlsbar/VLCSleepTimer.m \
 	gui/macosx/windows/controlsbar/VLCMainWindowControlsBar.h \
 	gui/macosx/windows/controlsbar/VLCMainWindowControlsBar.m \
 	gui/macosx/windows/video/VLCAspectRatioRetainingVideoWindow.h \
@@ -894,3 +925,129 @@ endif
 libmacosx_plugin_ladir = $(prefix)/share/macosx/Contents/Resources
 
 include gui/macosx/tests/Makefile.am
+
+# Exact exported Figma icons and the reference Inter fonts.
+libmacosx_plugin_la_RES += \
+	gui/macosx/Resources/Redesign/VLCRedesign-add.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-audio.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-back.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-bookmarks.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-chapters.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-close.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-folder.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-fullscreen-exit.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-fullscreen.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-home.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-library-back.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-library-expand.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-library-forward.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-library-more.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-library-search.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-library-sort.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-library-view.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-menu-about.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-menu-capture.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-menu-convert.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-menu-customize.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-menu-disc.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-menu-file.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-menu-folder.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-menu-hotkeys.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-menu-network.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-menu-profile.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-menu-recent.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-menu-settings.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-music.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-network.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-next.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-accent-blue-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-accent-blue.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-accent-cyan-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-accent-cyan.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-accent-gray-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-accent-gray.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-accent-green-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-accent-green.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-accent-orange-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-accent-orange.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-accent-pink-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-accent-pink.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-accent-purple-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-accent-purple.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-accent-red-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-accent-red.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-accent-yellow-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-accent-yellow.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-onboarding-cone.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-pause.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-play-accent.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-play.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-playback-settings.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-player-tab-audio.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-player-tab-bookmarks.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-player-tab-chapters.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-player-tab-playback.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-player-tab-queue.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-player-tab-subtitles.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-player-tab-video.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-playlists.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-previous.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-queue.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-queue-drag.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-queue-remove.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-queue-shuffle.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-queue-repeat.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-recent.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-remove.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-search.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-audio-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-audio.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-chevron.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-close.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-controls-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-controls.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-extensions-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-extensions.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-general-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-general.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-info.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-interface-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-interface.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-keyedit.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-library-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-library.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-network-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-network.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-performance-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-performance.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-playback-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-playback.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-privacy-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-privacy.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-recording-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-recording.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-search.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-subtitles-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-subtitles.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-video-active.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-video.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-subtitles.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-videos.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-volume-background.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-volume-fill.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-volume-high.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-volume-low.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-volume-mask.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-volume-medium.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-volume-muted.pdf \
+	gui/macosx/Resources/Redesign/Inter-LICENSE.txt \
+	gui/redesign/fonts/Inter-Light.ttf \
+	gui/redesign/fonts/Inter-Medium.ttf \
+	gui/redesign/fonts/Inter-Regular.ttf \
+	gui/redesign/fonts/Inter-SemiBold.ttf
+
+# Original Figma exports; source node/transform provenance: ../redesign/icons/README.md.
+libmacosx_plugin_la_RES += \
+	gui/macosx/Resources/Redesign/VLCRedesign-home-chevron.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-library-artist.pdf \
+	gui/macosx/Resources/Redesign/VLCRedesign-settings-crop-link.pdf

@@ -16,6 +16,7 @@
 #include "medialibrary/mlvideomodel.hpp"
 #include "medialibrary/mlrecentmediamodel.hpp"
 #include "medialibrary/mlrecentvideomodel.hpp"
+#include "medialibrary/mlrecentaudiomodel.hpp"
 #include "medialibrary/mlfoldersmodel.hpp"
 #include "medialibrary/mlvideogroupsmodel.hpp"
 #include "medialibrary/mlvideofoldersmodel.hpp"
@@ -46,6 +47,10 @@
 #include "util/flickable_scroll_handler.hpp"
 #include "util/kirigamiwheelhandler.hpp"
 #include "util/color_svg_image_provider.hpp"
+#include "util/interface_options_model.hpp"
+#include "util/interface_presets_model.hpp"
+#include "util/sleep_timer_model.hpp"
+#include "util/seek_preview_model.hpp"
 #include "util/effects_image_provider.hpp"
 #include "util/vlcaccess_image_provider.hpp"
 #include "util/csdbuttonmodel.hpp"
@@ -408,6 +413,10 @@ void MainUI::registerQMLTypes()
         const int versionMinor = 0;
 
         // @uri VLC.Util
+        qmlRegisterType<InterfaceOptionsModel>(uri, versionMajor, versionMinor, "InterfaceOptionsModel");
+        qmlRegisterType<InterfacePresetsModel>(uri, versionMajor, versionMinor, "InterfacePresetsModel");
+        qmlRegisterType<SleepTimerModel>(uri, versionMajor, versionMinor, "SleepTimerModel");
+        qmlRegisterType<SeekPreviewModel>(uri, versionMajor, versionMinor, "SeekPreviewModel");
         qmlRegisterSingletonInstance<QmlKeyHelper>(uri, versionMajor, versionMinor, "KeyHelper", new QmlKeyHelper(this));
         qmlRegisterSingletonType<EffectsImageProvider>(uri, versionMajor, versionMinor, "Effects", EffectsImageProvider::instance);
         qmlRegisterUncreatableType<SVGColorImageBuilder>(uri, versionMajor, versionMinor, "SVGColorImageBuilder", "");
@@ -476,6 +485,7 @@ void MainUI::registerQMLTypes()
         qmlRegisterType<MLMediaModel>( uri, versionMajor, versionMinor, "MLMediaModel" );
         qmlRegisterType<MLVideoModel>( uri, versionMajor, versionMinor, "MLVideoModel" );
         qmlRegisterType<MLRecentVideoModel>( uri, versionMajor, versionMinor, "MLRecentVideoModel" );
+        qmlRegisterType<MLRecentAudioModel>( uri, versionMajor, versionMinor, "MLRecentAudioModel" );
         qmlRegisterType<MLVideoGroupsModel>( uri, versionMajor, versionMinor, "MLVideoGroupsModel" );
         qmlRegisterType<MLVideoFoldersModel>( uri, versionMajor, versionMinor, "MLVideoFoldersModel" );
         qmlRegisterType<MLPlaylistListModel>( uri, versionMajor, versionMinor, "MLPlaylistListModel" );

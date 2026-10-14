@@ -232,6 +232,8 @@ libqt_plugin_la_SOURCES = \
 	medialibrary/mlrecentmediamodel.hpp \
 	medialibrary/mlrecentvideomodel.cpp \
 	medialibrary/mlrecentvideomodel.hpp \
+	medialibrary/mlrecentaudiomodel.cpp \
+	medialibrary/mlrecentaudiomodel.hpp \
 	medialibrary/mlurlmodel.cpp \
 	medialibrary/mlurlmodel.hpp \
 	medialibrary/mlvideo.cpp \
@@ -283,6 +285,7 @@ libqt_plugin_la_SOURCES = \
 	style/colorcontext.hpp \
 	style/systempalette.cpp \
 	style/systempalette.hpp \
+	style/widgettheme.hpp \
 	style/vlcicons.cpp 	style/vlcicons.hpp \
 	style/defaultthemeproviders.hpp \
 	style/systempalettethemeprovider.cpp \
@@ -340,6 +343,10 @@ libqt_plugin_la_SOURCES = \
 	util/varcommon_p.hpp \
 	util/varchoicemodel.cpp  util/varchoicemodel.hpp \
 	util/variables.cpp util/variables.hpp \
+	util/interface_options_model.cpp util/interface_options_model.hpp \
+	util/interface_presets_model.cpp util/interface_presets_model.hpp \
+	util/sleep_timer_model.cpp util/sleep_timer_model.hpp \
+	util/seek_preview_model.cpp util/seek_preview_model.hpp \
 	util/vlchotkeyconverter.cpp util/vlchotkeyconverter.hpp \
 	util/vlctick.cpp \
 	util/vlctick.hpp \
@@ -467,6 +474,7 @@ nodist_libqt_plugin_la_SOURCES = \
 	medialibrary/mlqmltypes.moc.cpp \
 	medialibrary/mlrecentmediamodel.moc.cpp \
 	medialibrary/mlrecentvideomodel.moc.cpp \
+	medialibrary/mlrecentaudiomodel.moc.cpp \
 	medialibrary/mlurlmodel.moc.cpp \
 	medialibrary/mlvideo.moc.cpp \
 	medialibrary/mlmediamodel.moc.cpp \
@@ -521,6 +529,10 @@ nodist_libqt_plugin_la_SOURCES = \
 	util/validators.moc.cpp \
 	util/varchoicemodel.moc.cpp \
 	util/variables.moc.cpp \
+	util/interface_options_model.moc.cpp \
+	util/interface_presets_model.moc.cpp \
+	util/sleep_timer_model.moc.cpp \
+	util/seek_preview_model.moc.cpp \
 	util/vlctick.moc.cpp \
 	util/dismiss_popup_event_filter.moc.cpp \
 	util/list_selection_model.moc.cpp \
@@ -790,6 +802,130 @@ ui_%.h: %.ui
 # Resources
 
 libqt_plugin_la_RES = \
+	../redesign/README.md \
+	../redesign/IMPLEMENTATION.md \
+	../redesign/fonts/Inter-Light.ttf \
+	../redesign/fonts/Inter-Medium.ttf \
+	../redesign/fonts/Inter-Regular.ttf \
+	../redesign/fonts/Inter-SemiBold.ttf \
+	../redesign/fonts/LICENSE.txt \
+	../redesign/fonts/README.md \
+	../redesign/icons/README.md \
+	../redesign/icons/add.svg \
+	../redesign/icons/audio.svg \
+	../redesign/icons/back.svg \
+	../redesign/icons/bookmarks.svg \
+	../redesign/icons/chapters.svg \
+	../redesign/icons/close.svg \
+	../redesign/icons/folder.svg \
+	../redesign/icons/fullscreen-exit.svg \
+	../redesign/icons/fullscreen.svg \
+	../redesign/icons/home.svg \
+	../redesign/icons/home-chevron.svg \
+	../redesign/icons/library-artist.svg \
+	../redesign/icons/library-back.svg \
+	../redesign/icons/library-expand.svg \
+	../redesign/icons/library-forward.svg \
+	../redesign/icons/library-more.svg \
+	../redesign/icons/library-search.svg \
+	../redesign/icons/library-sort.svg \
+	../redesign/icons/library-view.svg \
+	../redesign/icons/menu-about.svg \
+	../redesign/icons/menu-capture.svg \
+	../redesign/icons/menu-convert.svg \
+	../redesign/icons/menu-customize.svg \
+	../redesign/icons/menu-disc.svg \
+	../redesign/icons/menu-file.svg \
+	../redesign/icons/menu-folder.svg \
+	../redesign/icons/menu-hotkeys.svg \
+	../redesign/icons/menu-network.svg \
+	../redesign/icons/menu-profile.svg \
+	../redesign/icons/menu-recent.svg \
+	../redesign/icons/menu-settings.svg \
+	../redesign/icons/music.svg \
+	../redesign/icons/network.svg \
+	../redesign/icons/next.svg \
+	../redesign/icons/onboarding-accent-blue-active.svg \
+	../redesign/icons/onboarding-accent-blue.svg \
+	../redesign/icons/onboarding-accent-cyan-active.svg \
+	../redesign/icons/onboarding-accent-cyan.svg \
+	../redesign/icons/onboarding-accent-gray-active.svg \
+	../redesign/icons/onboarding-accent-gray.svg \
+	../redesign/icons/onboarding-accent-green-active.svg \
+	../redesign/icons/onboarding-accent-green.svg \
+	../redesign/icons/onboarding-accent-orange-active.svg \
+	../redesign/icons/onboarding-accent-orange.svg \
+	../redesign/icons/onboarding-accent-pink-active.svg \
+	../redesign/icons/onboarding-accent-pink.svg \
+	../redesign/icons/onboarding-accent-purple-active.svg \
+	../redesign/icons/onboarding-accent-purple.svg \
+	../redesign/icons/onboarding-accent-red-active.svg \
+	../redesign/icons/onboarding-accent-red.svg \
+	../redesign/icons/onboarding-accent-yellow-active.svg \
+	../redesign/icons/onboarding-accent-yellow.svg \
+	../redesign/icons/onboarding-cone.svg \
+	../redesign/icons/pause.svg \
+	../redesign/icons/play-accent.svg \
+	../redesign/icons/play.svg \
+	../redesign/icons/playback-settings.svg \
+	../redesign/icons/player-tab-audio.svg \
+	../redesign/icons/player-tab-bookmarks.svg \
+	../redesign/icons/player-tab-chapters.svg \
+	../redesign/icons/player-tab-playback.svg \
+	../redesign/icons/player-tab-queue.svg \
+	../redesign/icons/player-tab-subtitles.svg \
+	../redesign/icons/player-tab-video.svg \
+	../redesign/icons/playlists.svg \
+	../redesign/icons/previous.svg \
+	../redesign/icons/queue-drag.svg \
+	../redesign/icons/queue-remove.svg \
+	../redesign/icons/queue-repeat.svg \
+	../redesign/icons/queue-shuffle.svg \
+	../redesign/icons/queue.svg \
+	../redesign/icons/recent.svg \
+	../redesign/icons/remove.svg \
+	../redesign/icons/search.svg \
+	../redesign/icons/settings-audio-active.svg \
+	../redesign/icons/settings-audio.svg \
+	../redesign/icons/settings-chevron.svg \
+	../redesign/icons/settings-close.svg \
+	../redesign/icons/settings-controls-active.svg \
+	../redesign/icons/settings-controls.svg \
+	../redesign/icons/settings-crop-link.svg \
+	../redesign/icons/settings-extensions-active.svg \
+	../redesign/icons/settings-extensions.svg \
+	../redesign/icons/settings-general-active.svg \
+	../redesign/icons/settings-general.svg \
+	../redesign/icons/settings-info.svg \
+	../redesign/icons/settings-keyedit.svg \
+	../redesign/icons/settings-interface-active.svg \
+	../redesign/icons/settings-interface.svg \
+	../redesign/icons/settings-library-active.svg \
+	../redesign/icons/settings-library.svg \
+	../redesign/icons/settings-network-active.svg \
+	../redesign/icons/settings-network.svg \
+	../redesign/icons/settings-performance-active.svg \
+	../redesign/icons/settings-performance.svg \
+	../redesign/icons/settings-playback-active.svg \
+	../redesign/icons/settings-playback.svg \
+	../redesign/icons/settings-privacy-active.svg \
+	../redesign/icons/settings-privacy.svg \
+	../redesign/icons/settings-recording-active.svg \
+	../redesign/icons/settings-recording.svg \
+	../redesign/icons/settings-search.svg \
+	../redesign/icons/settings-subtitles-active.svg \
+	../redesign/icons/settings-subtitles.svg \
+	../redesign/icons/settings-video-active.svg \
+	../redesign/icons/settings-video.svg \
+	../redesign/icons/subtitles.svg \
+	../redesign/icons/videos.svg \
+	../redesign/icons/volume-background.svg \
+	../redesign/icons/volume-fill.svg \
+	../redesign/icons/volume-high.svg \
+	../redesign/icons/volume-low.svg \
+	../redesign/icons/volume-mask.svg \
+	../redesign/icons/volume-medium.svg \
+	../redesign/icons/volume-muted.svg \
 	pixmaps/VLCIcons.ttf \
 	pixmaps/addons/addon_default.svg \
 	pixmaps/addons/addon_broken.svg \
@@ -1061,6 +1197,7 @@ libqml_module_maininterface_a_QML = \
 	maininterface/qml/MainInterface.qml \
 	maininterface/qml/MainViewLoader.qml \
 	maininterface/qml/MainDisplay.qml \
+	maininterface/qml/RecentDisplay.qml \
 	maininterface/qml/SideNavigationPane.qml \
 	maininterface/qml/SideNavigationDelegate.qml \
 	maininterface/qml/NoMedialibHome.qml
@@ -1119,7 +1256,7 @@ libqml_module_medialibrary_a_QML = \
 	medialibrary/qml/MLDragItem.qml \
 	medialibrary/qml/MLTableColumns.qml \
 	medialibrary/qml/ScanProgressBar.qml
-libqml_module_medialibrary_a_Singleton_QML =
+libqml_module_medialibrary_a_Singleton_QML = medialibrary/qml/LibraryPins.qml
 libqml_module_medialibrary_a_SOURCES = $(QML_MODULE_medialibrary_SRC)
 nodist_libqml_module_medialibrary_a_SOURCES = medialibrary/qmlassets.cpp $(QML_MODULE_medialibrary_NODIST_EXTRA)
 QML_MODULE_LIBS += libqml_module_medialibrary.a
@@ -1172,6 +1309,10 @@ libqml_module_player_a_QML = \
 	player/qml/MiniPlayer.qml \
 	player/qml/PIPPlayer.qml \
 	player/qml/Player.qml \
+	player/qml/PlayerBookmarks.qml \
+	player/qml/PlayerLibrary.qml \
+	player/qml/PlayerOptions.qml \
+	player/qml/PlayerPresets.qml \
 	player/qml/PlayerControlLayout.qml \
 	player/qml/PlayerPlaylistVisibilityFSM.qml \
 	player/qml/PlayerToolbarVisibilityFSM.qml \
@@ -1190,6 +1331,7 @@ libqml_module_player_a_QML = \
 	player/qml/NavigationBox.qml
 
 libqml_module_player_a_Singleton_QML = \
+	player/qml/PlaybackTimer.qml \
 	player/qml/PlayerControlbarControls.qml
 libqml_module_player_a_SOURCES = $(QML_MODULE_player_SRC)
 nodist_libqml_module_player_a_SOURCES = player/qmlassets.cpp $(QML_MODULE_player_NODIST_EXTRA)
@@ -1209,6 +1351,7 @@ libqml_module_playercontrols_a_QML = \
 	player/qml/controlbarcontrols/ChapterNextButton.qml \
 	player/qml/controlbarcontrols/ChapterPreviousButton.qml \
 	player/qml/controlbarcontrols/DvdMenuButton.qml \
+	player/qml/controlbarcontrols/DividerWidget.qml \
 	player/qml/controlbarcontrols/ExpandingSpacerWidget.qml \
 	player/qml/controlbarcontrols/ExtendedSettingsButton.qml \
 	player/qml/controlbarcontrols/FasterButton.qml \
@@ -1354,6 +1497,7 @@ libqml_module_widgets_a_QML = \
 	widgets/qml/ScaledImage.qml \
 	widgets/qml/TextAutoScroller.qml \
 	widgets/qml/SearchBox.qml \
+	widgets/qml/InlineSearchField.qml \
 	widgets/qml/SliderExt.qml \
 	widgets/qml/SortControl.qml \
 	widgets/qml/SpinBoxExt.qml \

@@ -13,6 +13,7 @@ pseudo-bundle:
 	$(LN_S) -nf $(abs_top_builddir)/share/macosx/Info.plist $(top_builddir)/bin/Contents/Info.plist
 	$(LN_S) -nf $(CONTRIB_DIR)/Frameworks
 	cd $(top_builddir)/bin/Contents/Resources/ && find $(abs_top_srcdir)/modules/gui/macosx/Resources/ -type f -not -path "*.lproj/*" -exec $(LN_S) -f {} \;
+	cd $(top_builddir)/bin/Contents/Resources/ && for font in "$(abs_top_srcdir)/modules/gui/redesign/fonts/"*.ttf; do $(LN_S) -f "$$font" .; done
 
 macos-install:
 	rm -Rf "$(macos_destdir)"
