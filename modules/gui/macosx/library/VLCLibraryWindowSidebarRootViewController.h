@@ -27,6 +27,7 @@
 @class VLCLibraryWindowChaptersSidebarViewController;
 @class VLCLibraryWindowPlayQueueSidebarViewController;
 @class VLCLibraryWindowTitlesSidebarViewController;
+@class VLCLibraryWindowBookmarksSidebarViewController;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -53,6 +54,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (readonly) VLCLibraryWindowPlayQueueSidebarViewController *playQueueSidebarViewController;
 @property (readonly) VLCLibraryWindowChaptersSidebarViewController *chaptersSidebarViewController;
 @property (readonly) VLCLibraryWindowTitlesSidebarViewController *titlesSidebarViewController;
+@property (readonly) VLCLibraryWindowBookmarksSidebarViewController *bookmarksSidebarViewController;
 
 - (instancetype)initWithLibraryWindow:(VLCLibraryWindow *)libraryWindow;
 

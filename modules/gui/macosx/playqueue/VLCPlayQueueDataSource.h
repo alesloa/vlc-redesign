@@ -23,16 +23,22 @@
 #import <Cocoa/Cocoa.h>
 
 @class VLCPlayQueueController;
+@class VLCPlayQueueItem;
 @class VLCDragDropView;
 
 NS_ASSUME_NONNULL_BEGIN
 
 @interface VLCPlayQueueDataSource : NSObject <NSTableViewDataSource, NSTableViewDelegate>
 
-@property (readwrite, assign, nonatomic) VLCPlayQueueController *playQueueController;
-@property (readwrite, assign) NSTableView *tableView;
-@property (readwrite, assign) VLCDragDropView *dragDropView;
+@property (readwrite, weak, nonatomic) VLCPlayQueueController *playQueueController;
+@property (readwrite, weak) NSTableView *tableView;
+@property (readwrite, weak) VLCDragDropView *dragDropView;
 @property (readwrite, nonatomic) NSTextField *counterTextField;
+@property (copy, nonatomic) NSString *searchQuery;
+- (nullable VLCPlayQueueItem *)itemForVisibleRow:(NSInteger)row;
+- (NSUInteger)modelIndexForVisibleRow:(NSInteger)row;
+- (NSIndexSet *)modelIndexesForViewIndexes:(NSIndexSet *)indexes;
+- (void)removeItemWithUniqueID:(uint64_t)identifier;
 
 - (void)prepareForUse;
 - (void)playQueueItemsInsertedAtIndex:(NSUInteger)index count:(NSUInteger)count;

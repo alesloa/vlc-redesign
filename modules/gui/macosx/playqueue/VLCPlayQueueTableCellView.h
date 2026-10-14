@@ -32,8 +32,9 @@ extern NSString * const VLCDisplayTrackNumberPlayQueueSettingChanged;
 
 @interface VLCPlayQueueTableCellView : NSTableCellView
 
-@property (readwrite, assign, nonatomic) VLCPlayQueueItem *representedPlayQueueItem;
+@property (readwrite, strong, nonatomic) VLCPlayQueueItem *representedPlayQueueItem;
 @property (readwrite, nonatomic) BOOL representsCurrentPlayQueueItem;
+@property (copy, nullable) void (^removalHandler)(uint64_t identifier);
 
 @property (readwrite, assign) IBOutlet NSTextField *artistTextField;
 @property (readwrite, assign) IBOutlet NSTextField *secondaryMediaTitleTextField;

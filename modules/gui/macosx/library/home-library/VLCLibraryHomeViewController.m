@@ -24,6 +24,7 @@
 
 #import "extensions/NSImage+VLCAdditions.h"
 #import "extensions/NSString+Helpers.h"
+#import "extensions/NSView+VLCAdditions.h"
 
 #import "library/VLCLibraryController.h"
 #import "library/VLCLibraryModel.h"
@@ -47,6 +48,8 @@
 #import "views/VLCUIUnits.h"
 
 #import "windows/video/VLCMainVideoViewController.h"
+#import "library/VLCCompactLibraryViewController.h"
+#import "library/VLCLibraryNavigationData.h"
 
 @interface VLCLibraryHomeViewController ()
 {
@@ -56,6 +59,7 @@
 }
 @property (readwrite, nullable, nonatomic) VLCLibrarySearchViewController *searchViewController;
 @property (readwrite) BOOL isShowingSearchOverlay;
+@property VLCCompactLibraryViewController *redesignHomeController;
 @end
 
 @implementation VLCLibraryHomeViewController
@@ -125,8 +129,26 @@
 
 - (void)setupGridViewController
 {
-    _stackViewController = [[VLCLibraryHomeViewStackViewController alloc] init];
-    self.stackViewController.collectionsStackView = _homeLibraryStackView;
+    // The Figma full Home uses the same real sections as the player sidebar,
+    // presented as cards rather than the upstream hero/actions carousel.
+    _redesignHomeController = [VLCCompactLibraryViewController new];
+    _redesignHomeController.fullLibrary = YES;
+    __weak typeof(self) weakSelf = self;
+    _redesignHomeController.expandLibrary = ^(VLCLibrarySegmentType segment) {
+        weakSelf.libraryWindow.librarySegmentType = segment;
+    };
+    _redesignHomeController.navigateBack = ^{ [weakSelf.libraryWindow backwardsNavigationAction:weakSelf]; };
+    _redesignHomeController.navigateForward = ^{ [weakSelf.libraryWindow forwardsNavigationAction:weakSelf]; };
+    _redesignHomeController.presentLibraryItem = ^(id item) {
+        if ([item isKindOfClass:NSURL.class]) {
+            weakSelf.libraryWindow.librarySegmentType = VLCLibraryBrowseSegmentType;
+            [weakSelf.libraryWindow browseFolderByMrl:[item absoluteString]];
+        } else [weakSelf.libraryWindow presentLibraryItem:item];
+    };
+    self.homeLibraryStackViewScrollView.hidden = YES;
+    NSView *view = _redesignHomeController.view;
+    [self.homeLibraryView addSubview:view];
+    [view applyConstraintsToFillSuperview];
 }
 
 - (void)setupHomePlaceholderView
@@ -168,7 +190,8 @@
 
 - (void)updatePresentedView
 {
-    if (VLCMain.sharedInstance.libraryController.libraryModel.numberOfVideoMedia == 0) { // empty library
+    VLCLibraryModel *model = VLCMain.sharedInstance.libraryController.libraryModel;
+    if (model.numberOfVideoMedia == 0 && model.numberOfAudioMedia == 0 && model.listOfMonitoredFolders.count == 0) {
         [self presentPlaceholderHomeLibraryView];
     } else if (self.isShowingSearchOverlay) {
         [self presentSearchOverlay];
@@ -198,8 +221,15 @@
 - (void)presentHomeLibraryView
 {
     [self.libraryWindow displayLibraryView:self.homeLibraryView];
-    self.homeLibraryStackViewScrollView.hidden = NO;
-    [self.stackViewController reloadData];
+    self.homeLibraryStackViewScrollView.hidden = YES;
+    [self.redesignHomeController reloadItems];
+    [self updateNavigationControls];
+}
+
+- (void)updateNavigationControls
+{
+    [self.redesignHomeController updateNavigationWithBackwardsAvailable:self.libraryWindow.backwardsNavigationButton.enabled
+                                                     forwardsAvailable:self.libraryWindow.forwardsNavigationButton.enabled];
 }
 
 - (void)presentSearchOverlay
@@ -221,10 +251,8 @@
     const BOOL homeLibraryViewPresent = [targetViewSubViews containsObject:self.homeLibraryView];
     if (self.libraryWindow.librarySegmentType == VLCLibraryHomeSegmentType &&
         !self.isShowingSearchOverlay &&
-        ((videoCount == 0 && !emptyLibraryViewPresent) ||
-         (videoCount > 0 && !homeLibraryViewPresent) ||
-         (audioCount == 0 && !emptyLibraryViewPresent) ||
-         (audioCount > 0 && !homeLibraryViewPresent)) &&
+        (((videoCount + audioCount == 0 && model.listOfMonitoredFolders.count == 0) && !emptyLibraryViewPresent) ||
+         ((videoCount + audioCount > 0 || model.listOfMonitoredFolders.count > 0) && !homeLibraryViewPresent)) &&
         !self.libraryWindow.embeddedVideoPlaybackActive) {
 
         [self updatePresentedView];
@@ -310,12 +338,13 @@
 
 - (void)connect
 {
-    [self.stackViewController connectContainers];
+    [super connect];
+    [self.redesignHomeController reloadItems];
 }
 
 - (void)disconnect
 {
-    [self.stackViewController disconnectContainers];
+    [super disconnect];
 }
 
 #pragma mark - VLCLibraryDynamicToolbarFlagsCapable
@@ -326,7 +355,7 @@
         return VLCLibraryWindowToolbarDisplayFlagLibrarySearchBar |
                VLCLibraryWindowToolbarDisplayFlagToggleViewModeSegmentButton;
     }
-    return VLCLibraryWindowToolbarDisplayFlagLibrarySearchBar;
+    return 0; // Source-backed search/view/sort controls are in the Home header.
 }
 
 #pragma mark - VLCLibraryDynamicViewModeCapable

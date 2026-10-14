@@ -69,6 +69,22 @@ const CGFloat VLCMediaItemCollectionViewItemMaximumDisplayedProgress = 0.95;
         self.playInstantlyButton.imageScaling = NSImageScaleProportionallyUpOrDown;
         self.playInstantlyButton.controlSize = NSControlSizeExtraLarge;
 
+        // The nib shares the 32px More button's dimensions on older macOS.
+        // Glass uses the existing 48px playback size, so those equalities no
+        // longer describe these two controls on macOS 26.
+        for (NSLayoutConstraint *constraint in self.view.constraints) {
+            BOOL sameButtons =
+                (constraint.firstItem == self.playInstantlyButton &&
+                 constraint.secondItem == self.addToPlayQueueButton) ||
+                (constraint.firstItem == self.addToPlayQueueButton &&
+                 constraint.secondItem == self.playInstantlyButton);
+            BOOL sameDimension = constraint.firstAttribute == constraint.secondAttribute &&
+                (constraint.firstAttribute == NSLayoutAttributeWidth ||
+                 constraint.firstAttribute == NSLayoutAttributeHeight);
+            if (sameButtons && sameDimension && constraint.relation == NSLayoutRelationEqual)
+                constraint.active = NO;
+        }
+
         const CGFloat playButtonSize = VLCUIUnits.mediumPlaybackControlButtonSize;
         [NSLayoutConstraint activateConstraints:@[
             [self.playInstantlyButton.widthAnchor constraintEqualToConstant:playButtonSize],

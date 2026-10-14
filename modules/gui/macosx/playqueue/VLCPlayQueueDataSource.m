@@ -40,6 +40,7 @@ static NSString *VLCPlayQueueCellIdentifier = @"VLCPlayQueueCellIdentifier";
 @interface VLCPlayQueueDataSource ()
 {
     VLCPlayQueueModel *_playQueueModel;
+    NSArray<VLCPlayQueueItem *> *_visibleItems;
 }
 @end
 
@@ -47,15 +48,46 @@ static NSString *VLCPlayQueueCellIdentifier = @"VLCPlayQueueCellIdentifier";
 
 - (void)setPlayQueueController:(VLCPlayQueueController *)playQueueController
 {
+    [_playQueueController unregisterPlayQueueDataSource:self];
     _playQueueController = playQueueController;
     _playQueueModel = _playQueueController.playQueueModel;
+    [_playQueueController registerPlayQueueDataSource:self];
+    [self rebuildVisibleItems];
+}
+- (void)rebuildVisibleItems
+{
+    NSArray *items=_playQueueModel.playQueueItems ?: @[]; NSString *query=self.searchQuery ?: @"";
+    _visibleItems=!query.length?items.copy:[items filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(VLCPlayQueueItem *item,NSDictionary *bindings){
+        return [item.title localizedCaseInsensitiveContainsString:query] || [item.path localizedCaseInsensitiveContainsString:query] ||
+            [item.artistName localizedCaseInsensitiveContainsString:query] || [item.albumName localizedCaseInsensitiveContainsString:query];
+    }]];
+}
+- (void)setSearchQuery:(NSString *)query {_searchQuery=[query copy];[self playQueueUpdated];}
+- (VLCPlayQueueItem *)itemForVisibleRow:(NSInteger)row
+{
+    return row>=0 && row<_visibleItems.count?_visibleItems[row]:nil;
+}
+- (NSUInteger)modelIndexForVisibleRow:(NSInteger)row
+{
+    VLCPlayQueueItem *item=[self itemForVisibleRow:row]; if(!item)return NSNotFound;
+    return [_playQueueModel.playQueueItems indexOfObjectPassingTest:^BOOL(VLCPlayQueueItem *candidate,NSUInteger index,BOOL *stop){return candidate.uniqueID==item.uniqueID;}];
+}
+- (NSIndexSet *)modelIndexesForViewIndexes:(NSIndexSet *)indexes
+{
+    NSMutableIndexSet *mapped=[NSMutableIndexSet indexSet];
+    [indexes enumerateIndexesUsingBlock:^(NSUInteger index,BOOL *stop){NSUInteger target=[self modelIndexForVisibleRow:index];if(target!=NSNotFound)[mapped addIndex:target];}];return mapped;
+}
+- (void)removeItemWithUniqueID:(uint64_t)identifier
+{
+    NSUInteger index=[_playQueueModel.playQueueItems indexOfObjectPassingTest:^BOOL(VLCPlayQueueItem *item,NSUInteger index,BOOL *stop){return item.uniqueID==identifier;}];
+    if(index!=NSNotFound)[self.playQueueController removeItemsAtIndexes:[NSIndexSet indexSetWithIndex:index]];
 }
 
 - (void)setCounterTextField:(NSTextField *)counterTextField
 {
     _counterTextField = counterTextField;
     self.counterTextField.stringValue =
-        [NSString stringWithFormat:@"%lu", _playQueueModel.numberOfPlayQueueItems];
+        [NSString stringWithFormat:@"%lu %@", _playQueueModel.numberOfPlayQueueItems,_NS("Items")];
 }
 
 - (void)prepareForUse
@@ -73,7 +105,7 @@ static NSString *VLCPlayQueueCellIdentifier = @"VLCPlayQueueCellIdentifier";
 
 - (NSInteger)numberOfRowsInTableView:(NSTableView *)tableView
 {
-    return _playQueueModel.numberOfPlayQueueItems;
+    return _visibleItems.count;
 }
 
 - (NSView *)tableView:(NSTableView *)tableView viewForTableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row
@@ -82,7 +114,7 @@ static NSString *VLCPlayQueueCellIdentifier = @"VLCPlayQueueCellIdentifier";
         [tableView makeViewWithIdentifier:VLCPlayQueueCellIdentifier owner:self];
 
     if (cellView == nil) {
-        cellView = [VLCPlayQueueTableCellView fromNibWithOwner:self];
+        cellView = [[VLCPlayQueueTableCellView alloc] initWithFrame:NSMakeRect(0,0,tableColumn.width,32)];
         if (cellView == nil) {
             msg_Err(getIntf(), "Failed to load nib file to show playlist items");
             return nil;
@@ -90,31 +122,41 @@ static NSString *VLCPlayQueueCellIdentifier = @"VLCPlayQueueCellIdentifier";
         cellView.identifier = VLCPlayQueueCellIdentifier;
     }
 
-    VLCPlayQueueItem * const item = [_playQueueModel playQueueItemAtIndex:row];
+    VLCPlayQueueItem * const item = [self itemForVisibleRow:row];
     if (!item) {
         msg_Err(getIntf(), "playlist model did not return an item for representation");
         return cellView;
     }
 
     cellView.representedPlayQueueItem = item;
-    cellView.representsCurrentPlayQueueItem = _playQueueController.currentPlayQueueIndex == (size_t)row;
+    cellView.representsCurrentPlayQueueItem = _playQueueController.currentPlayQueueIndex == [self modelIndexForVisibleRow:row];
+    __weak typeof(self) weakSelf=self;
+    cellView.removalHandler=^(uint64_t identifier){[weakSelf removeItemWithUniqueID:identifier];};
 
     return cellView;
 }
 
 - (void)playQueueUpdated
 {
+    NSMutableSet *selectedIDs=[NSMutableSet set];
+    [self.tableView.selectedRowIndexes enumerateIndexesUsingBlock:^(NSUInteger index,BOOL *stop){VLCPlayQueueItem *item=[self itemForVisibleRow:index];if(item)[selectedIDs addObject:@(item.uniqueID)];}];
+    [self rebuildVisibleItems];
     const NSUInteger numberOfPlayQueueItems = _playQueueModel.numberOfPlayQueueItems;
     self.dragDropView.hidden = numberOfPlayQueueItems > 0 ? YES : NO;
-    self.counterTextField.stringValue = [NSString stringWithFormat:@"%lu", numberOfPlayQueueItems];
+    self.counterTextField.stringValue = [NSString stringWithFormat:@"%lu %@", numberOfPlayQueueItems,_NS("Items")];
     [_tableView reloadData];
+    NSMutableIndexSet *selection=[NSMutableIndexSet indexSet];
+    [_visibleItems enumerateObjectsUsingBlock:^(VLCPlayQueueItem *item,NSUInteger index,BOOL *stop){if([selectedIDs containsObject:@(item.uniqueID)])[selection addIndex:index];}];
+    [self.tableView selectRowIndexes:selection byExtendingSelection:NO];
 }
 
 - (void)playQueueItemsInsertedAtIndex:(NSUInteger)index count:(NSUInteger)count
 {
+    if(self.searchQuery.length){[self playQueueUpdated];return;}
+    [self rebuildVisibleItems];
     const NSUInteger numberOfPlayQueueItems = _playQueueModel.numberOfPlayQueueItems;
     self.dragDropView.hidden = numberOfPlayQueueItems > 0 ? YES : NO;
-    self.counterTextField.stringValue = [NSString stringWithFormat:@"%lu", numberOfPlayQueueItems];
+    self.counterTextField.stringValue = [NSString stringWithFormat:@"%lu %@", numberOfPlayQueueItems,_NS("Items")];
 
     if (count == 0) {
         return;
@@ -128,6 +170,8 @@ static NSString *VLCPlayQueueCellIdentifier = @"VLCPlayQueueCellIdentifier";
 
 - (void)playQueueItemsUpdatedAtIndex:(NSUInteger)index count:(NSUInteger)count
 {
+    if(self.searchQuery.length){[self playQueueUpdated];return;}
+    [self rebuildVisibleItems];
     if (count == 0) {
         return;
     }
@@ -142,7 +186,8 @@ static NSString *VLCPlayQueueCellIdentifier = @"VLCPlayQueueCellIdentifier";
 - (id<NSPasteboardWriting>)tableView:(NSTableView *)tableView pasteboardWriterForRow:(NSInteger)row
 {
     NSPasteboardItem * const pboardItem = [[NSPasteboardItem alloc] init];
-    VLCPlayQueueItem * const playlistItem = [_playQueueModel playQueueItemAtIndex:row];
+    VLCPlayQueueItem * const playlistItem = [self itemForVisibleRow:row];
+    if(!playlistItem)return nil;
     [pboardItem setString:[@(playlistItem.uniqueID) stringValue] forType:VLCPlaylistItemPasteboardType];
     return pboardItem;
 }
@@ -164,7 +209,7 @@ static NSString *VLCPlayQueueCellIdentifier = @"VLCPlayQueueCellIdentifier";
         [tableView setDropRow:row + 1 dropOperation:NSTableViewDropAbove];
     }
 
-    return NSDragOperationCopy;
+    return info.draggingSource==tableView?NSDragOperationMove:NSDragOperationCopy;
 }
 
 - (BOOL)tableView:(NSTableView *)tableView
@@ -172,11 +217,17 @@ static NSString *VLCPlayQueueCellIdentifier = @"VLCPlayQueueCellIdentifier";
               row:(NSInteger)row
     dropOperation:(NSTableViewDropOperation)dropOperation
 {
-    NSString *encodedIDtoMove = [info.draggingPasteboard stringForType:VLCPlaylistItemPasteboardType];
-    if (encodedIDtoMove != nil) {
-        int64_t uniqueID = [encodedIDtoMove integerValue];
-        [_playQueueController moveItemWithID:uniqueID toPosition:row];
-        return YES;
+    // A filtered view row represents an actual playlist identity, not its model
+    // position. Insert at that live identity, or at the real end of the queue.
+    NSUInteger insertion=row<0 || row>=_visibleItems.count?_playQueueModel.numberOfPlayQueueItems:[self modelIndexForVisibleRow:row];
+    if(insertion==NSNotFound)return NO;
+    NSMutableArray<NSNumber *> *IDs = [NSMutableArray array];
+    for (NSPasteboardItem *item in info.draggingPasteboard.pasteboardItems) {
+        NSString *value = [item stringForType:VLCPlaylistItemPasteboardType];
+        if (value) { unsigned long long identifier; NSScanner *scanner = [NSScanner scannerWithString:value]; if ([scanner scanUnsignedLongLong:&identifier] && scanner.isAtEnd) [IDs addObject:@(identifier)]; }
+    }
+    if (IDs.count) {
+        return [_playQueueController moveItemsWithIDs:IDs toPosition:insertion] == VLC_SUCCESS;
     }
 
     /* Collect library media items from all pasteboard items.
@@ -216,7 +267,7 @@ static NSString *VLCPlayQueueCellIdentifier = @"VLCPlayQueueCellIdentifier";
     }
 
     if (allMediaItems.count > 0) {
-        NSInteger insertionIndex = (NSInteger)row;
+        NSInteger insertionIndex = insertion;
         for (VLCMediaLibraryMediaItem * const mediaItem in allMediaItems) {
             [_playQueueController addInputItem:mediaItem.inputItem.vlcInputItem
                                     atPosition:insertionIndex
@@ -227,7 +278,9 @@ static NSString *VLCPlayQueueCellIdentifier = @"VLCPlayQueueCellIdentifier";
     }
 
     return [VLCFileDragRecognisingView
-        handlePasteboardFromDragSessionAsPlayQueueItems:info.draggingPasteboard];
+        handlePasteboardFromDragSessionAsPlayQueueItems:info.draggingPasteboard
+                                            atPosition:insertion
+                                         startPlayback:NO];
 }
 
 - (NSArray<NSTableViewRowAction *> *)tableView:(NSTableView *)tableView
@@ -235,7 +288,7 @@ static NSString *VLCPlayQueueCellIdentifier = @"VLCPlayQueueCellIdentifier";
                                           edge:(NSTableRowActionEdge)edge
 {
     if (edge == NSTableRowActionEdgeTrailing) {
-        VLCPlayQueueItem * const item = [_playQueueController.playQueueModel playQueueItemAtIndex:row];
+        VLCPlayQueueItem * const item = [self itemForVisibleRow:row];
         if (item == nil) {
             return @[];
         }
@@ -244,8 +297,7 @@ static NSString *VLCPlayQueueCellIdentifier = @"VLCPlayQueueCellIdentifier";
             [NSTableViewRowAction rowActionWithStyle:NSTableViewRowActionStyleDestructive
                                                 title:_NS("Remove from Play Queue")
                                                handler:^(NSTableViewRowAction * const __unused action, const NSInteger row) {
-                NSIndexSet * const indices = [NSIndexSet indexSetWithIndex:row];
-                [_playQueueController removeItemsAtIndexes:indices];
+                [self removeItemWithUniqueID:item.uniqueID];
             }];
         return @[removeAction];
     }
@@ -254,7 +306,12 @@ static NSString *VLCPlayQueueCellIdentifier = @"VLCPlayQueueCellIdentifier";
 
 - (void)scrollToCurrentPlayQueueItem
 {
-    [_tableView scrollRowToVisible:_playQueueController.currentPlayQueueIndex];
+    if (_visibleItems.count)
+        [_tableView reloadDataForRowIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, _visibleItems.count)]
+                             columnIndexes:[NSIndexSet indexSetWithIndex:0]];
+    VLCPlayQueueItem *current=[_playQueueModel playQueueItemAtIndex:_playQueueController.currentPlayQueueIndex];
+    NSUInteger row=[_visibleItems indexOfObjectPassingTest:^BOOL(VLCPlayQueueItem *item,NSUInteger index,BOOL *stop){return current && item.uniqueID==current.uniqueID;}];
+    if(row!=NSNotFound)[_tableView scrollRowToVisible:row];
 }
 
 @end

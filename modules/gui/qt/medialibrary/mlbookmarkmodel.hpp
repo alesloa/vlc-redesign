@@ -78,9 +78,9 @@ public:
     MediaLib* ml() const;
     void setMl(MediaLib* ml);
 
-    void add();
-    void remove( const QModelIndexList& indexes );
-    void clear();
+    Q_INVOKABLE void add();
+    Q_INVOKABLE void remove( const QModelIndexList& indexes );
+    Q_INVOKABLE void clear();
     Q_INVOKABLE void select( const QModelIndex& index );
 
 private:
@@ -116,8 +116,11 @@ private:
 
     mutable vlc::threads::mutex m_mutex;
     uint64_t m_revision = 0;
-    // current item & media id can be accessed by any thread and therefore
-    // must be accessed with m_mutex held
+    // GUI-thread request ordering prevents older list completions replacing
+    // newer edits, even when the current input has not changed.
+    uint64_t m_refreshRevision = 0;
+    // The current item and input revision may be accessed by any thread and
+    // must be accessed with m_mutex held.
     InputItemPtr m_currentItem;
 
     vlc_ml_sorting_criteria_t m_sort = VLC_ML_SORTING_INSERTIONDATE;

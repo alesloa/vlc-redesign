@@ -357,9 +357,10 @@ T.ItemDelegate {
                 id: titleLabel
 
                 height: implicitHeight
+                font.weight: Font.Normal
                 color: root.selected
                     ? theme.fg.highlight
-                    : theme.fg.primary
+                    : theme.fg.secondary
             }
         }
 

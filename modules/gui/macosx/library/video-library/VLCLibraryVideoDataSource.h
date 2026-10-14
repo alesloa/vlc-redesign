@@ -37,6 +37,8 @@ extern NSString * const VLCLibraryVideoDataSourceDisplayedCollectionChangedNotif
 @property (readwrite, weak) VLCLibraryModel *libraryModel;
 @property (readwrite, weak) NSCollectionView *collectionView;
 @property (readwrite, weak) NSTableView *tableView;
+// GUI-only history mode combines existing audio/video history, never all media.
+@property BOOL recentOnly;
 
 - (void)reloadData;
 

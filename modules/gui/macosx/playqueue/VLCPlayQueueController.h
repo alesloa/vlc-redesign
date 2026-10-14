@@ -59,7 +59,11 @@ extern NSString * const VLCPlayQueueItemsRemoved;
 /**
  * The datasource instance used to actually display the playlist.
  */
-@property (readwrite, assign) VLCPlayQueueDataSource *playQueueDataSource;
+@property (readwrite, weak) VLCPlayQueueDataSource *playQueueDataSource;
+
+/** Independent GUI views share the original playlist model and callbacks. */
+- (void)registerPlayQueueDataSource:(VLCPlayQueueDataSource *)dataSource;
+- (void)unregisterPlayQueueDataSource:(VLCPlayQueueDataSource *)dataSource;
 
 /**
  * The player instance associated with the playlist
@@ -148,6 +152,7 @@ extern NSString * const VLCPlayQueueItemsRemoved;
  * @return returns VLC_SUCCESS or an error
  */
 - (int)moveItemWithID:(int64_t)uniqueID toPosition:(size_t)target;
+- (int)moveItemsWithIDs:(NSArray<NSNumber *> *)uniqueIDs toPosition:(size_t)target;
 
 /**
  * Remove all items at the given index set

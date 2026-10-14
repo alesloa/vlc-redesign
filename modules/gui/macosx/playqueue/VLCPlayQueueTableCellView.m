@@ -42,8 +42,47 @@
 
 NSString * const VLCDisplayTrackNumberPlayQueueKey = @"VLCDisplayTrackNumberPlayQueueKey";
 NSString * const VLCDisplayTrackNumberPlayQueueSettingChanged = @"VLCDisplayTrackNumberPlayQueueSettingChanged";
+@interface VLCQueueDragGlyph : NSImageView
+@end
+@implementation VLCQueueDragGlyph
+- (NSView *)hitTest:(NSPoint)point {return nil;}
+@end
+@interface VLCPlayQueueTableCellView ()
+@property VLCQueueDragGlyph *dragGlyph;
+@property NSButton *removeButton;
+@end
 
 @implementation VLCPlayQueueTableCellView
+- (instancetype)initWithFrame:(NSRect)frame
+{
+    self=[super initWithFrame:frame];if(!self)return nil;
+    // Figma Queue463:831:32px row,24px drag/remove glyphs,14px caption,
+    //12px timestamp. Playlist values and actions remain the existing model.
+    _dragGlyph=[[VLCQueueDragGlyph alloc] init];_dragGlyph.image=[NSImage vlc_redesignImageNamed:@"queue-drag"];
+    _removeButton=[NSButton buttonWithTitle:@"" target:self action:@selector(removeRepresentedItem:)];
+    _removeButton.image=[NSImage vlc_redesignImageNamed:@"queue-remove"];
+    _removeButton.bordered=NO;_removeButton.toolTip=_NS("Remove from Play Queue");_removeButton.accessibilityLabel=_removeButton.toolTip;
+    NSTextField *title=[NSTextField labelWithString:@""],*duration=[NSTextField labelWithString:@""];
+    title.lineBreakMode=NSLineBreakByTruncatingTail;duration.alignment=NSTextAlignmentRight;
+    for(NSView *view in @[_dragGlyph,title,duration,_removeButton])[self addSubview:view];
+    self.mediaTitleTextField=title;self.durationTextField=duration;
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(updateRepresentation) name:VLCDisplayTrackNumberPlayQueueSettingChanged object:nil];
+    [self updateFonts];return self;
+}
+- (void)layout
+{
+    [super layout];if(!self.dragGlyph)return;
+    CGFloat width=self.bounds.size.width,center=(self.bounds.size.height-24)/2;
+    self.dragGlyph.frame=NSMakeRect(0,center,24,24);
+    self.removeButton.frame=NSMakeRect(MAX(0,width-24),center,24,24);
+    self.durationTextField.frame=NSMakeRect(MAX(32,width-104),(self.bounds.size.height-18)/2,72,18);
+    self.mediaTitleTextField.frame=NSMakeRect(32,(self.bounds.size.height-20)/2,MAX(0,width-144),20);
+}
+- (void)removeRepresentedItem:(id)sender
+{
+    VLCPlayQueueItem *item=self.representedPlayQueueItem;
+    if(item && self.removalHandler)self.removalHandler(item.uniqueID);
+}
 
 - (void)dealloc
 {
@@ -76,6 +115,10 @@ NSString * const VLCDisplayTrackNumberPlayQueueSettingChanged = @"VLCDisplayTrac
 
 - (void)updateFonts
 {
+    if(self.dragGlyph) {
+        self.mediaTitleTextField.font=[NSFont vlc_redesignFontOfSize:14 weight:NSFontWeightRegular];
+        self.durationTextField.font=[NSFont vlc_redesignFontOfSize:12 weight:NSFontWeightRegular];return;
+    }
     NSFont * const displayedFont = _representsCurrentPlayQueueItem ?
         [NSFont boldSystemFontOfSize:NSFont.systemFontSize] :
         [NSFont systemFontOfSize:NSFont.systemFontSize];
@@ -92,6 +135,12 @@ NSString * const VLCDisplayTrackNumberPlayQueueSettingChanged = @"VLCDisplayTrac
 
 - (void)updateColouredElements
 {
+    self.mediaTitleTextField.textColor=NSColor.VLCControlForegroundColor;
+    self.durationTextField.textColor=NSColor.VLCSecondaryForegroundColor;
+    if(@available(macOS 10.14,*)){
+        self.dragGlyph.contentTintColor=self.representsCurrentPlayQueueItem?NSColor.VLCAccentColor:NSColor.VLCSecondaryForegroundColor;
+        self.removeButton.contentTintColor=NSColor.VLCSecondaryForegroundColor;
+    }
     self.audioMediaTypeIndicator.textColor = _representsCurrentPlayQueueItem ?
         NSColor.labelColor :
         NSColor.secondaryLabelColor;
@@ -111,7 +160,7 @@ NSString * const VLCDisplayTrackNumberPlayQueueSettingChanged = @"VLCDisplayTrac
     self.mediaImageView.contentGravity = VLCImageViewContentGravityResizeAspect;
 
     __weak typeof(self) weakSelf = self;
-    [VLCLibraryImageCache thumbnailForPlayQueueItem:item withCompletion:^(NSImage * const thumbnail) {
+    if(self.audioArtworkImageView || self.mediaImageView)[VLCLibraryImageCache thumbnailForPlayQueueItem:item withCompletion:^(NSImage * const thumbnail) {
         if (!weakSelf || item != weakSelf.representedPlayQueueItem) {
             return;
         }
@@ -136,6 +185,9 @@ NSString * const VLCDisplayTrackNumberPlayQueueSettingChanged = @"VLCDisplayTrac
     }
 
     NSString *songDetailString = @"";
+    if(self.dragGlyph){self.mediaTitleTextField.stringValue=playTitle ?: @"";
+        self.mediaTitleTextField.toolTip=playTitle;self.durationTextField.stringValue=item.duration==VLC_TICK_INVALID?@"":[NSString stringWithTimeFromTicks:item.duration];
+        [self updateFonts];[self updateColouredElements];return;}
 
     if (validArtistString && validAlbumString) {
         songDetailString = [NSString stringWithFormat:@"%@ · %@", item.artistName, item.albumName];

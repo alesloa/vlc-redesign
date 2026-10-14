@@ -116,6 +116,15 @@ static VLCLibraryWindowPersistentPreferences *sharedInstance = nil;
     return [self libraryViewModePreferenceWithKey:VLCLibraryVideoLibraryViewModePreferenceKey];
 }
 
+- (VLCLibraryViewModeSegment)recentLibraryViewMode
+{
+    return [self libraryViewModePreferenceWithKey:@"RecentLibraryViewMode"];
+}
+- (void)setRecentLibraryViewMode:(VLCLibraryViewModeSegment)viewMode
+{
+    [self setLibraryWindowViewModePreferenceWithKey:@"RecentLibraryViewMode" value:viewMode];
+}
+
 - (void)setVideoLibraryViewMode:(VLCLibraryViewModeSegment)videoLibraryViewMode
 {
     [self setLibraryWindowViewModePreferenceWithKey:VLCLibraryVideoLibraryViewModePreferenceKey

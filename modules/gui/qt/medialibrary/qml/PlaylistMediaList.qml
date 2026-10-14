@@ -302,6 +302,7 @@ MainViewLoader {
             Navigation.parentItem: root
 
             delegate: VideoGridItem {
+                id: playlistCard
                 //---------------------------------------------------------------------------------
                 // Properties
 
@@ -336,6 +337,17 @@ MainViewLoader {
                 ]
 
                 dragItem: dragItemPlaylist
+
+                Widgets.ButtonExt {
+                    parent: playlistCard.mediaCover
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: VLCStyle.margin_xsmall
+                    visible: playlistCard.hovered || playlistCard.visualFocus || activeFocus
+                    enabled: !!playlistCard.model.id
+                    text: LibraryPins.contains(playlistCard.model.id) ? qsTr("Unpin") : qsTr("Pin")
+                    onClicked: LibraryPins.toggle(playlistCard.model.id)
+                }
 
 
                 //---------------------------------------------------------------------------------
@@ -406,6 +418,11 @@ MainViewLoader {
         Widgets.TableViewExt {
             id: tableView
 
+            property var _pinColumn: ({
+                size: 1,
+                model: { criteria: "pin", text: qsTr("Pins"), isSortable: false, colDelegate: pinColumn }
+            })
+
             //-------------------------------------------------------------------------------------
             // Properties
 
@@ -422,7 +439,7 @@ MainViewLoader {
                     headerDelegate: columns.titleHeaderDelegate,
                     colDelegate   : columns.titleDelegate
                 }
-            }]
+            }, _pinColumn]
 
             property var _modelMedium: [{
                 weight: 1,
@@ -445,7 +462,7 @@ MainViewLoader {
 
                     isSortable: false
                 }
-            }]
+            }, _pinColumn]
 
             //-------------------------------------------------------------------------------------
             // Settings
@@ -497,6 +514,19 @@ MainViewLoader {
 
             //-------------------------------------------------------------------------------------
             // Childs
+
+            Component {
+                id: pinColumn
+                Widgets.TableRowDelegate {
+                    id: pinCell
+                    Widgets.ButtonExt {
+                        anchors.centerIn: parent
+                        enabled: !!pinCell.rowModel.id
+                        text: LibraryPins.contains(pinCell.rowModel.id) ? qsTr("Unpin") : qsTr("Pin")
+                        onClicked: LibraryPins.toggle(pinCell.rowModel.id)
+                    }
+                }
+            }
 
             Widgets.TableColumns {
                 id: columns

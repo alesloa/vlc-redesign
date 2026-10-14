@@ -23,11 +23,31 @@
 #import "VLCLibraryWindowChaptersSidebarViewController.h"
 
 #import "extensions/NSString+Helpers.h"
+#import "extensions/NSColor+VLCAdditions.h"
+#import "extensions/NSFont+VLCAdditions.h"
+#import "extensions/NSView+VLCAdditions.h"
 #import "library/VLCLibraryDataTypes.h"
 #import "main/VLCMain.h"
 #import "playqueue/VLCPlayerChapter.h"
 #import "playqueue/VLCPlayerController.h"
 #import "playqueue/VLCPlayQueueController.h"
+
+@interface VLCChapterSidebarTable : NSTableView
+@end
+@implementation VLCChapterSidebarTable
+- (void)keyDown:(NSEvent *)event
+{
+    unichar key = event.characters.length ? [event.characters characterAtIndex:0] : 0;
+    if (key == NSEnterCharacter || key == NSCarriageReturnCharacter) {
+        // Chapters are read-only player metadata, not editable queue items.
+        // Forward the original chapter selection action rather than the Queue
+        // subclass's Return/Delete handlers for an unrelated playlist index.
+        [NSApp sendAction:self.action to:self.target from:self];
+    } else {
+        [super keyDown:event];
+    }
+}
+@end
 
 @interface VLCLibraryWindowChaptersSidebarViewController ()
 
@@ -52,6 +72,28 @@
     _chaptersArrayController = [[NSArrayController alloc] init];
 
     [self.tableView deselectAll:self];
+    // Queue463:831 and its Chapters tab share32px rows/12px gaps,20px
+    // margins and a separate utility/count row. Keep all original bindings.
+    self.view.identifier = @"VLCRedesignedLibraryContent";
+    self.view.wantsLayer = YES;
+    self.tableView.identifier = @"VLCRedesignedSidebarTable";
+    self.tableView.headerView = nil;
+    NSScrollView *scroll = self.tableView.enclosingScrollView;
+    NSMutableArray *legacyConstraints = [NSMutableArray array];
+    for (NSLayoutConstraint *constraint in self.view.constraints) {
+        if (constraint.firstItem == scroll || constraint.secondItem == scroll ||
+            constraint.firstItem == self.titleSeparator || constraint.secondItem == self.titleSeparator)
+            [legacyConstraints addObject:constraint];
+    }
+    [NSLayoutConstraint deactivateConstraints:legacyConstraints];
+    self.titleSeparator.hidden = YES;
+    [NSLayoutConstraint activateConstraints:@[
+        [scroll.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:50.],
+        [scroll.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20.],
+        [scroll.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20.],
+        [scroll.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:-20.]
+    ]];
+    [self.view vlc_applyRedesignStyle];
     [self.tableView bind:NSContentBinding
                 toObject:self.chaptersArrayController
              withKeyPath:@"arrangedObjects" 
@@ -107,6 +149,8 @@
 
     const struct vlc_player_title * const title = playerController.selectedTitle;
     if (title == NULL) {
+        self.internalItemCount = 0;
+        self.counterLabel.stringValue = @"0";
         self.chaptersArrayController.content = @[];
         return;
     }
@@ -132,7 +176,7 @@
 - (IBAction)tableViewAction:(id)sender
 {
     const NSUInteger selectedIndex = self.chaptersArrayController.selectionIndex;
-    if (selectedIndex == NSNotFound) {
+    if (selectedIndex == NSNotFound || selectedIndex >= self.internalItemCount) {
         return;
     }
 
@@ -149,8 +193,22 @@
 {
     const NSUInteger selectedChapterIndex =
         VLCMain.sharedInstance.playQueueController.playerController.selectedChapterIndex;
-    NSIndexSet * const indexSet = [NSIndexSet indexSetWithIndex:selectedChapterIndex];
+    NSIndexSet * const indexSet = selectedChapterIndex < self.internalItemCount ?
+        [NSIndexSet indexSetWithIndex:selectedChapterIndex] : [NSIndexSet indexSet];
     [self.tableView selectRowIndexes:indexSet byExtendingSelection:NO];
+}
+
+- (void)viewDidLayout
+{
+    [super viewDidLayout];
+    CGFloat width = self.tableView.enclosingScrollView.contentSize.width;
+    if (width <= 0.) return;
+    [self.tableView setFrameSize:NSMakeSize(width, NSHeight(self.tableView.frame))];
+    if (self.tableView.tableColumns.count == 2) {
+        NSTableColumn *time = self.tableView.tableColumns.lastObject;
+        time.minWidth = 76.; time.maxWidth = 76.; time.width = 76.;
+        self.tableView.tableColumns.firstObject.width = MAX(100., width - 76.);
+    }
 }
 
 # pragma mark - NSTableView delegation
@@ -167,6 +225,11 @@
                             toObject:cellView
                          withKeyPath:@"objectValue.name"
                              options:nil];
+        cellView.textField.font = [NSFont vlc_redesignFontOfSize:14. weight:NSFontWeightRegular];
+        cellView.textField.textColor = NSColor.VLCControlForegroundColor;
+        cellView.textField.translatesAutoresizingMaskIntoConstraints = YES;
+        cellView.textField.autoresizingMask = NSViewWidthSizable | NSViewMinYMargin | NSViewMaxYMargin;
+        cellView.textField.frame = NSMakeRect(0., 6., tableColumn.width, 20.);
         return cellView;
     } else if ([tableColumn.identifier isEqualToString:@"VLCLibraryWindowChaptersTableViewTimeColumnIdentifier"]) {
         NSTableCellView * const cellView =
@@ -176,6 +239,12 @@
                             toObject:cellView
                          withKeyPath:@"objectValue.durationString"
                              options:nil];
+        cellView.textField.font = [NSFont vlc_redesignFontOfSize:12. weight:NSFontWeightRegular];
+        cellView.textField.textColor = NSColor.VLCSecondaryForegroundColor;
+        cellView.textField.alignment = NSTextAlignmentRight;
+        cellView.textField.translatesAutoresizingMaskIntoConstraints = YES;
+        cellView.textField.autoresizingMask = NSViewWidthSizable | NSViewMinYMargin | NSViewMaxYMargin;
+        cellView.textField.frame = NSMakeRect(0., 7., tableColumn.width, 18.);
         return cellView;
     }
 

@@ -27,6 +27,7 @@
 #import "extensions/NSString+Helpers.h"
 #import "extensions/NSMenu+VLCAdditions.h"
 #import "extensions/NSMenuItem+VLCAdditions.h"
+#import "extensions/NSImage+VLCAdditions.h"
 #import "library/VLCLibraryAddToPlaylistMenuController.h"
 #import "library/VLCLibraryController.h"
 #import "library/VLCLibraryDataTypes.h"
@@ -35,11 +36,12 @@
 #import "playqueue/VLCPlayQueueController.h"
 #import "playqueue/VLCPlayQueueModel.h"
 #import "playqueue/VLCPlayQueueItem.h"
+#import "playqueue/VLCPlayQueueDataSource.h"
 #import "playqueue/VLCPlayQueueSortingMenuController.h"
 #import "windows/VLCOpenWindowController.h"
 #import "panels/VLCInformationWindowController.h"
 
-@interface VLCPlayQueueMenuController ()
+@interface VLCPlayQueueMenuController () <NSMenuDelegate>
 {
     VLCPlayQueueController *_playQueueController;
     VLCPlayQueueSortingMenuController *_playQueueSortingMenuController;
@@ -60,6 +62,8 @@
 @property (readwrite, atomic) NSArray<NSMenuItem *> *items;
 @property (readwrite, atomic) NSArray<NSMenuItem *> *multipleSelectionItems;
 @property (readwrite, atomic) NSArray<NSMenuItem *> *backgroundItems;
+@property NSArray<NSNumber *> *contextIDs;
+@property NSUInteger contextGeneration;
 
 @end
 
@@ -113,6 +117,13 @@
     [_clearPlayQueueMenuItem vlc_setActionImageWithSystemSymbolName:@"xmark.circle"];
     [_createPlaylistMenuItem vlc_setActionImageWithSystemSymbolName:@"music.note.list"];
     [_sortMenuItem vlc_setActionImageWithSystemSymbolName:@"arrow.up.arrow.down"];
+    _playMenuItem.image = [NSImage vlc_redesignImageNamed:@"play"];
+    _removeMenuItem.image = [NSImage vlc_redesignImageNamed:@"queue-remove"];
+    _revealInFinderMenuItem.image = [NSImage vlc_redesignImageNamed:@"folder"];
+    _informationMenuItem.image = [NSImage vlc_redesignImageNamed:@"settings-info"];
+    _addFilesToPlayQueueMenuItem.image = [NSImage vlc_redesignImageNamed:@"menu-file"];
+    _clearPlayQueueMenuItem.image = [NSImage vlc_redesignImageNamed:@"queue-remove"];
+    _sortMenuItem.image = [NSImage vlc_redesignImageNamed:@"library-sort"];
 
     self.items = @[
         _playMenuItem,
@@ -143,7 +154,24 @@
     ];
 
     _playQueueMenu = [[NSMenu alloc] init];
+    _playQueueMenu.delegate=self;
     _playQueueMenu.itemArray = self.items;
+    [_playQueueMenu vlc_applyRedesignMenuStyle];
+}
+- (NSIndexSet *)selectedModelIndexes
+{
+    if(self.contextIDs) {
+        NSMutableIndexSet *indexes=[NSMutableIndexSet indexSet];NSSet *identities=[NSSet setWithArray:self.contextIDs];
+        [_playQueueController.playQueueModel.playQueueItems enumerateObjectsUsingBlock:^(VLCPlayQueueItem *item,NSUInteger index,BOOL *stop){if([identities containsObject:@(item.uniqueID)])[indexes addIndex:index];}];return indexes;
+    }
+    id source=self.playQueueTableView.dataSource;
+    return [source isKindOfClass:VLCPlayQueueDataSource.class]?[(VLCPlayQueueDataSource *)source modelIndexesForViewIndexes:self.playQueueTableView.selectedRowIndexes]:self.playQueueTableView.selectedRowIndexes;
+}
+- (NSUInteger)selectedModelRow {return self.selectedModelIndexes.firstIndex;}
+- (void)menuDidClose:(NSMenu *)menu
+{
+    NSUInteger generation=self.contextGeneration;
+    dispatch_async(dispatch_get_main_queue(), ^{if(generation==self.contextGeneration)self.contextIDs=nil;});
 }
 
 - (void)setPlayQueueTableView:(NSTableView *)playQueueTableView
@@ -165,7 +193,7 @@
 
 - (NSArray<VLCMediaLibraryMediaItem *> *)selectedMediaLibraryItems
 {
-    NSIndexSet * const selectedIndexes = self.playQueueTableView.selectedRowIndexes;
+    NSIndexSet * const selectedIndexes = self.selectedModelIndexes;
     NSMutableArray<VLCMediaLibraryMediaItem *> * const mediaItems =
         [NSMutableArray arrayWithCapacity:selectedIndexes.count];
 
@@ -190,7 +218,7 @@
 
 - (void)updateStreamSpecificMenuItems
 {
-    NSIndexSet * const selectedIndexes = self.playQueueTableView.selectedRowIndexes;
+    NSIndexSet * const selectedIndexes = self.selectedModelIndexes;
     __block BOOL hasStream = NO;
 
     [selectedIndexes enumerateIndexesUsingBlock:^(NSUInteger idx, BOOL *stop) {
@@ -208,6 +236,9 @@
 
 - (void)prepareForContextMenuTarget:(VLCPlayQueueContextMenuTarget)target
 {
+    self.contextIDs=nil;self.contextGeneration++;
+    if(target==VLCPlayQueueContextMenuTargetRow){NSMutableArray *identities=[NSMutableArray array];
+        [self.selectedModelIndexes enumerateIndexesUsingBlock:^(NSUInteger index,BOOL *stop){VLCPlayQueueItem *item=[self->_playQueueController.playQueueModel playQueueItemAtIndex:index];if(item)[identities addObject:@(item.uniqueID)];}];self.contextIDs=identities;}
     if (target == VLCPlayQueueContextMenuTargetRow) {
         [self updateAddToPlaylistMenuItem];
         [self updateStreamSpecificMenuItems];
@@ -223,18 +254,18 @@
 
 - (void)play:(id)sender
 {
-    NSInteger selectedRow = self.playQueueTableView.selectedRow;
+    NSUInteger selectedRow = self.selectedModelRow;
 
-    if (selectedRow != -1) {
+    if (selectedRow != NSNotFound) {
         [_playQueueController playItemAtIndex:selectedRow];
-    } else {
+    } else if (!self.contextIDs) {
         [_playQueueController startPlayQueue];
     }
 }
 
 - (void)remove:(id)sender
 {
-    [_playQueueController removeItemsAtIndexes:self.playQueueTableView.selectedRowIndexes];
+    [_playQueueController removeItemsAtIndexes:self.selectedModelIndexes];
 }
 
 - (void)showInformationPanel:(id)sender
@@ -244,7 +275,7 @@
     }
 
     NSMutableArray * const inputItems = NSMutableArray.array;
-    NSIndexSet * const selectedIndices = self.playQueueTableView.selectedRowIndexes;
+    NSIndexSet * const selectedIndices = self.selectedModelIndexes;
 
     [selectedIndices enumerateIndexesUsingBlock:^(const NSUInteger idx, BOOL * const __unused stop) {
         VLCPlayQueueItem * const item =
@@ -261,9 +292,9 @@
 
 - (void)revealInFinder:(id)sender
 {
-    NSInteger selectedRow = self.playQueueTableView.selectedRow;
+    NSUInteger selectedRow = self.selectedModelRow;
 
-    if (selectedRow == -1)
+    if (selectedRow == NSNotFound)
         return;
 
     VLCPlayQueueItem *item = [_playQueueController.playQueueModel playQueueItemAtIndex:selectedRow];
@@ -276,11 +307,14 @@
 
 - (void)addFilesToPlayQueue:(id)sender
 {
-    NSInteger selectedRow = self.playQueueTableView.selectedRow;
+    NSUInteger selectedRow = self.selectedModelRow;
+    VLCPlayQueueItem *target=selectedRow==NSNotFound?nil:[_playQueueController.playQueueModel playQueueItemAtIndex:selectedRow];
+    uint64_t identifier=target.uniqueID;
 
     [[VLCMain.sharedInstance open] openFileWithAction:^(NSArray *files) {
+        NSUInteger liveIndex=target?[self->_playQueueController.playQueueModel.playQueueItems indexOfObjectPassingTest:^BOOL(VLCPlayQueueItem *item,NSUInteger index,BOOL *stop){return item.uniqueID==identifier;}]:NSNotFound;
         [self->_playQueueController addPlayQueueItems:files
-                                           atPosition:selectedRow
+                                           atPosition:liveIndex==NSNotFound?self->_playQueueController.playQueueModel.numberOfPlayQueueItems:liveIndex
                                         startPlayback:NO];
     }];
 }
@@ -312,10 +346,10 @@
     } else if (menuItem == _removeMenuItem ||
                menuItem == _playMenuItem ||
                menuItem == _informationMenuItem) {
-        return (self.playQueueTableView.numberOfSelectedRows > 0);
+        return (self.selectedModelIndexes.count > 0);
 
     } else if (menuItem == _revealInFinderMenuItem) {
-        return (self.playQueueTableView.numberOfSelectedRows == 1);
+        return (self.selectedModelIndexes.count == 1);
     }
 
     return NO;

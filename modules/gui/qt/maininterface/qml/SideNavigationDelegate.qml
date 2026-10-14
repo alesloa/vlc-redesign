@@ -33,9 +33,12 @@ T.ItemDelegate {
 
     property string iconTxt: ""
 
+    property url iconSource: ""
+    property bool mirrorIcon: false
+
     property bool showText: true
 
-    property real radius: VLCStyle.button_radius
+    property real radius: MainCtx.dp(4)
 
     // Settings
 
@@ -68,9 +71,11 @@ T.ItemDelegate {
             "video": "videoNavBar",
             "music": "musicNavBar",
             "network": "browseNavBar",
+            "recent": "recentNavBar",
             "discover": "discoverNavBar"
         }
-        const id = navBarIds[model.uri[0]]
+        const id = model.uri[0] === "video" && model.uri[1] === "playlists"
+            ? "playlistsNavBar" : navBarIds[model.uri[0]]
         if (id !== undefined)
             return id
         else
@@ -99,7 +104,8 @@ T.ItemDelegate {
 
     background: Widgets.AnimatedBackground {
         enabled: theme.initialized
-        color: theme.bg.primary
+        color: (control.checked || control.hovered || control.down)
+            ? theme.bg.secondary : "transparent"
         border.color: visualFocus ? theme.visualFocus : "transparent"
 
         radius: control.radius
@@ -110,10 +116,10 @@ T.ItemDelegate {
                 leftMargin: VLCStyle.margin_xxxsmall
                 verticalCenter: parent.verticalCenter
             }
-            implicitHeight: parent.height / 2
-            visible: control.checked
+            implicitHeight: parent.height - VLCStyle.margin_xsmall
+            visible: control.checked && control.showText
 
-            radius: control.radius / 2
+            radius: VLCStyle.margin_xxxsmall
         }
     }
 
@@ -121,13 +127,13 @@ T.ItemDelegate {
         spacing: VLCStyle.margin_xsmall
 
         Item {
-            Layout.preferredWidth: VLCStyle.icon_banner
+            Layout.preferredWidth: MainCtx.dp(control.showText ? 32 : 24)
             Layout.fillHeight: true
 
             Widgets.IconLabel {
                 id: iconLabel
 
-                visible: text.length > 0
+                visible: control.iconSource.toString().length === 0 && text.length > 0
 
                 anchors.centerIn: parent
 
@@ -138,7 +144,19 @@ T.ItemDelegate {
 
                 color: (control.highlighted || control.checked) ? theme.accent : theme.fg.primary
 
-                font.pixelSize: VLCStyle.icon_banner
+                font.pixelSize: MainCtx.dp(24)
+            }
+
+            Image {
+                visible: control.iconSource.toString().length > 0
+                anchors.centerIn: parent
+                width: MainCtx.dp(24)
+                height: width
+                fillMode: Image.PreserveAspectFit
+                mirror: control.mirrorIcon
+                source: visible ? SVGColorImage.colorize(control.iconSource)
+                    .any({"#8F8F8F": (control.highlighted || control.checked)
+                        ? theme.accent : theme.fg.primary}).uri() : ""
             }
         }
 
@@ -152,7 +170,7 @@ T.ItemDelegate {
 
             verticalAlignment: Text.AlignVCenter
 
-            color: control.checked ? theme.fg.secondary : theme.fg.primary
+            color: theme.fg.primary
 
             elide: Text.ElideRight
 
@@ -160,7 +178,7 @@ T.ItemDelegate {
 
             font.pixelSize: VLCStyle.fontSize_normal
 
-            font.weight: control.checked ? Font.DemiBold : Font.Normal
+            font.weight: Font.Normal
 
             //button text is already exposed
             Accessible.ignored: true

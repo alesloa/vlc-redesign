@@ -691,7 +691,12 @@ quint64 MLListCacheLoader::loadItemsTask(size_t offset, const QVector<int> &inde
             if (indexes.isEmpty())
                 return;
 
+            ctx.items.resize(indexes.size());
             auto sortedIndexes = indexes;
+            sortedIndexes.erase(std::remove_if(sortedIndexes.begin(), sortedIndexes.end(),
+                                               [](int index) { return index < 0; }), sortedIndexes.end());
+            if (sortedIndexes.isEmpty())
+                return;
             std::sort(sortedIndexes.begin(), sortedIndexes.end());
 
             struct Range
@@ -710,18 +715,20 @@ quint64 MLListCacheLoader::loadItemsTask(size_t offset, const QVector<int> &inde
                     ranges.push_back(Range {index, index});
             }
 
-            ctx.items.resize(indexes.size());
-
             vlc_ml_query_params_t queryParam = op->getQueryParams();
             for (const auto range : ranges)
             {
                 queryParam.i_offset = offset + range.low;
-                queryParam.i_nbResults = offset + range.high - range.low + 1;
+                queryParam.i_nbResults = range.high - range.low + 1;
                 auto data = op->load(ml, &queryParam);
                 for (int i = 0; i < indexes.size(); ++i)
                 {
                     const auto targetIndex = indexes[i];
-                    if (targetIndex >= range.low && targetIndex <= range.high)
+                    if (targetIndex >= range.low && targetIndex <= range.high
+                        // Rows can disappear between a GUI request and the ML
+                        // query. getDataFlat already represents failed loads
+                        // as empty objects; preserve that contract here.
+                        && size_t(targetIndex - range.low) < data.size())
                     {
                         ctx.items.at(i) = std::move(data.at(targetIndex - range.low));
                     }

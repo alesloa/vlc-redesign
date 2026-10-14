@@ -22,14 +22,42 @@ import QtQuick.Templates as T
 
 import VLC.MainInterface
 import VLC.Style
+import VLC.Util
 import VLC.Widgets as Widgets
 
 Widgets.PageExt {
     id: root
 
     title: qsTr("Albums")
+    // A pinned album selects and expands the existing live album view.
+    property var albumId
+    property int pendingAlbumIndex: -1
+    function revealAlbum() {
+        if (!albumId || !albumId.isValid()) return
+        const requested = albumId.toString()
+        albumsView.model.getIndexFromId(albumId).then(function(index) {
+            if (root.albumId && root.albumId.toString() === requested) {
+                root.pendingAlbumIndex = index
+                root.applyAlbumSelection()
+            }
+        }, function() {})
+    }
+    function applyAlbumSelection() {
+        const view = albumsView.currentItem
+        if (pendingAlbumIndex < 0 || !view || view.currentIndex === undefined) return
+        const index = pendingAlbumIndex
+        pendingAlbumIndex = -1
+        albumsView.initialIndex = index
+        albumsView.selectionModel.updateSelection(Qt.NoModifier, view.currentIndex, index)
+        view.currentIndex = index
+        view.positionViewAtIndex(index, ItemView.Contain)
+        if (MainCtx.gridView && typeof view.switchExpandItem === "function")
+            view.switchExpandItem(index)
+    }
+    onAlbumIdChanged: revealAlbum()
 
     MusicAlbums {
+        id: albumsView
         anchors.fill: parent
 
         focus: true
@@ -44,7 +72,8 @@ Widgets.PageExt {
         enableBeginningFade: root.enableBeginningFade
         enableEndFade: root.enableEndFade
 
-        onCurrentIndexChanged: History.viewProp.initialIndex = currentIndex
+        onCurrentIndexChanged: if (History.viewProp) History.viewProp.initialIndex = currentIndex
+        onCurrentItemChanged: Qt.callLater(root.applyAlbumSelection)
     }
 
 }

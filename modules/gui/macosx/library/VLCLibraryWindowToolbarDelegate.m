@@ -23,6 +23,9 @@
 #import "VLCLibraryWindowToolbarDelegate.h"
 
 #import "extensions/NSString+Helpers.h"
+#import "extensions/NSImage+VLCAdditions.h"
+#import "extensions/NSFont+VLCAdditions.h"
+#import "extensions/NSColor+VLCAdditions.h"
 
 #import "library/VLCLibraryWindow.h"
 #import "library/VLCLibraryWindowSidebarRootViewController.h"
@@ -36,27 +39,52 @@
 NSString * const VLCLibraryWindowTrackingSeparatorToolbarItemIdentifier = 
     @"VLCLibraryWindowTrackingSeparatorToolbarItemIdentifier";
 
+@interface VLCLibraryWindowToolbarDelegate ()
+@property NSDictionary<NSString *, NSToolbarItem *> *sourceItems;
+@property NSArray<NSString *> *defaultItemIdentifiers;
+@property NSToolbarItem *breadcrumbToolbarItem;
+@property NSTextField *breadcrumbLabel;
+@property NSTextField *countLabel;
+@end
+
 @implementation VLCLibraryWindowToolbarDelegate
 
 #pragma mark - XIB handling
 
 - (void)awakeFromNib
 {
-    self.toolbar.allowsUserCustomization = NO;
+    NSMutableDictionary *items = [NSMutableDictionary dictionary];
+    NSMutableArray *defaults = [NSMutableArray array];
+    for (NSToolbarItem *item in self.toolbar.items) { items[item.itemIdentifier] = item; [defaults addObject:item.itemIdentifier]; }
+    _breadcrumbToolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:@"VLCLibraryBreadcrumbToolbarItem"];
+    _breadcrumbToolbarItem.label = _NS("Library");
+    NSStackView *header = [[NSStackView alloc] initWithFrame:NSMakeRect(0, 0, 240, 28)]; header.spacing = 20;
+    _breadcrumbLabel = [NSTextField labelWithString:@""]; _breadcrumbLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    _breadcrumbLabel.font = [NSFont vlc_redesignFontOfSize:16 weight:NSFontWeightRegular]; _breadcrumbLabel.textColor = NSColor.VLCControlForegroundColor;
+    [_breadcrumbLabel setContentHuggingPriority:NSLayoutPriorityDefaultLow forOrientation:NSLayoutConstraintOrientationHorizontal];
+    _countLabel = [NSTextField labelWithString:@""]; _countLabel.font = [NSFont vlc_redesignFontOfSize:14 weight:NSFontWeightRegular]; _countLabel.textColor = NSColor.VLCSecondaryForegroundColor;
+    [header addArrangedSubview:_breadcrumbLabel]; [header addArrangedSubview:_countLabel];
+    _breadcrumbToolbarItem.view = header; _breadcrumbToolbarItem.minSize = NSMakeSize(80, 28); _breadcrumbToolbarItem.maxSize = NSMakeSize(800, 28);
+    items[_breadcrumbToolbarItem.itemIdentifier] = _breadcrumbToolbarItem;
+    [defaults addObject:_breadcrumbToolbarItem.itemIdentifier];
+    self.sourceItems = items;
+    self.defaultItemIdentifiers = defaults;
+    self.toolbar.allowsUserCustomization = YES;
+    self.toolbar.autosavesConfiguration = YES;
+    self.backwardsToolbarItem.image = [NSImage vlc_redesignImageNamed:@"library-back"];
+    self.forwardsToolbarItem.image = [NSImage vlc_redesignImageNamed:@"library-forward"];
+    self.sortOrderToolbarItem.image = [NSImage vlc_redesignImageNamed:@"library-sort"];
+    self.togglePlayQueueToolbarItem.image = [NSImage vlc_redesignImageNamed:@"queue"];
     
     if (@available(macOS 11.0, *)) {
         const NSInteger navSidebarToggleToolbarItemIndex = 
             [self.toolbar.items indexOfObject:self.toggleNavSidebarToolbarItem];
 
-        NSAssert(navSidebarToggleToolbarItemIndex != NSNotFound,
-                 @"Could not find navigation sidebar toggle toolbar item!");
-
-        const NSInteger trackingSeparatorItemIndex = navSidebarToggleToolbarItemIndex + 1;
-        [self.toolbar 
-            insertItemWithItemIdentifier:VLCLibraryWindowTrackingSeparatorToolbarItemIdentifier
-                                 atIndex:trackingSeparatorItemIndex];
-        _trackingSeparatorToolbarItem =
-            [self.toolbar.items objectAtIndex:trackingSeparatorItemIndex];
+        if (navSidebarToggleToolbarItemIndex != NSNotFound) {
+            const NSInteger trackingSeparatorItemIndex = navSidebarToggleToolbarItemIndex + 1;
+            [self.toolbar insertItemWithItemIdentifier:VLCLibraryWindowTrackingSeparatorToolbarItemIdentifier atIndex:trackingSeparatorItemIndex];
+            _trackingSeparatorToolbarItem = [self.toolbar.items objectAtIndex:trackingSeparatorItemIndex];
+        }
     }
 
     NSNotificationCenter * const notificationCenter = NSNotificationCenter.defaultCenter;
@@ -103,8 +131,14 @@ NSString * const VLCLibraryWindowTrackingSeparatorToolbarItemIdentifier =
         }
     }
 
-    return nil;
+    return self.sourceItems[itemIdentifier];
 }
+
+- (NSArray<NSToolbarItemIdentifier> *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar
+{
+    return [self.sourceItems.allKeys arrayByAddingObjectsFromArray:@[NSToolbarFlexibleSpaceItemIdentifier, NSToolbarSpaceItemIdentifier]];
+}
+- (NSArray<NSToolbarItemIdentifier> *)toolbarDefaultItemIdentifiers:(NSToolbar *)toolbar { return self.defaultItemIdentifiers; }
 
 #pragma mark - renderers toolbar item handling
 
@@ -277,10 +311,23 @@ NSString * const VLCLibraryWindowTrackingSeparatorToolbarItemIdentifier =
 
 - (void)applyVisiblityFlags:(VLCLibraryWindowToolbarDisplayFlags)flags
 {
-    [self setForwardsBackwardsToolbarItemsVisible:flags & VLCLibraryWindowToolbarDisplayFlagNavigationButtons];
+    // Full Home owns its reference header; every other library category uses
+    // the existing customizable toolbar with real navigation and metadata.
+    BOOL libraryHeader = self.libraryWindow.librarySegmentType != VLCLibraryHomeSegmentType;
+    [self setForwardsBackwardsToolbarItemsVisible:libraryHeader || (flags & VLCLibraryWindowToolbarDisplayFlagNavigationButtons)];
     [self setSortOrderToolbarItemVisible:flags & VLCLibraryWindowToolbarDisplayFlagSortOrderButton];
     [self setLibrarySearchToolbarItemVisible:flags & VLCLibraryWindowToolbarDisplayFlagLibrarySearchBar];
     [self setViewModeToolbarItemVisible:flags & VLCLibraryWindowToolbarDisplayFlagToggleViewModeSegmentButton];
+    if (libraryHeader) [self insertToolbarItem:self.breadcrumbToolbarItem inFrontOf:@[self.forwardsToolbarItem, self.backwardsToolbarItem, self.toggleNavSidebarToolbarItem]];
+    else [self hideToolbarItem:self.breadcrumbToolbarItem];
+}
+
+- (void)updateLibraryHeaderWithTitle:(NSString *)title count:(NSNumber *)count
+{
+    self.breadcrumbLabel.stringValue = title;
+    self.breadcrumbLabel.toolTip = title;
+    self.countLabel.stringValue = count == nil ? @"" : [NSString stringWithFormat:toNSStr(vlc_ngettext("%lu item", "%lu items", count.unsignedLongValue)), count.unsignedLongValue];
+    self.countLabel.hidden = count == nil;
 }
 
 @end

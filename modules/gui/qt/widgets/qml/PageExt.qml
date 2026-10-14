@@ -39,6 +39,11 @@ T.Page {
 
     property bool isSearchable: _firstChild?.isSearchable ?? false
 
+    // Counts come from the active VLC model, never the reference's sample media.
+    readonly property int itemCount: Number.isFinite(_firstChild?.model?.count)
+        ? _firstChild.model.count : -1
+    property int displayedItemCount: itemCount
+
     property var sortModel: _firstChild?.sortModel ?? null
 
     //property is *not* readOnly, a PageLoader may define a localMenuDelegate common for its subviews (music, video)
@@ -112,8 +117,8 @@ T.Page {
     header: DefaultPageHeader {
         text: root.title
 
-        leftPadding: VLCStyle.dynamicAppMargins(width) + VLCStyle.layout_left_margin + root.leftPadding
-        rightPadding: VLCStyle.dynamicAppMargins(width) + VLCStyle.layout_right_margin + root.rightPadding
+        leftPadding: MainCtx.dp(20, VLCStyle.scale) + root.leftPadding
+        rightPadding: MainCtx.dp(20, VLCStyle.scale) + root.rightPadding
 
         sortMenu: root.sortMenu
 
@@ -144,8 +149,8 @@ T.Page {
 
         position: T.ToolBar.Header
 
-        topPadding: VLCStyle.layoutTitle_top_padding
-        bottomPadding: VLCStyle.layoutTitle_bottom_padding
+        topPadding: MainCtx.dp(20, VLCStyle.scale)
+        bottomPadding: MainCtx.dp(17, VLCStyle.scale)
 
         // FIXME: `GridItem`'s background extends beyond its
         //        bounding rect, violating the hypothetical
@@ -176,13 +181,83 @@ T.Page {
             id: row
 
             anchors.fill: parent
+            spacing: MainCtx.dp(10, VLCStyle.scale)
+
+            IconToolButton {
+                text: VLCIcons.back
+                description: qsTr("Previous")
+                iconSource: "qrc:/redesign/icons/library-back.svg"
+                mirrorIcon: true
+                Layout.preferredWidth: MainCtx.dp(24, VLCStyle.scale)
+                Layout.preferredHeight: MainCtx.dp(32, VLCStyle.scale)
+                enabled: !History.previousEmpty
+                onClicked: History.previous()
+                Navigation.parentItem: defaultPageHeader
+                AccessibleCompat.id: "pageHistoryBackButton"
+            }
+
+            IconToolButton {
+                text: VLCIcons.back
+                // Back/Forward are named in the owner's walkthrough.
+                description: qsTr("Forward")
+                iconSource: "qrc:/redesign/icons/library-forward.svg"
+                mirrorIcon: true
+                Layout.preferredWidth: MainCtx.dp(24, VLCStyle.scale)
+                Layout.preferredHeight: MainCtx.dp(32, VLCStyle.scale)
+                enabled: !History.nextEmpty
+                onClicked: History.next()
+                Navigation.parentItem: defaultPageHeader
+                AccessibleCompat.id: "pageHistoryForwardButton"
+            }
+
+            T.ToolButton {
+                id: categoryButton
+                // Category names are published in Figma's library navigation.
+                readonly property var captions: ({home: qsTr("Home"), video: qsTr("Videos"),
+                    music: qsTr("Music"), network: qsTr("Network"), discover: qsTr("Discover"),
+                    recent: qsTr("Recent")})
+                text: captions[root.pagePrefix[0]] || ""
+                visible: text.length > 0 && text !== defaultPageHeader.text
+                implicitWidth: contentItem.implicitWidth
+                implicitHeight: MainCtx.dp(32, VLCStyle.scale)
+                onClicked: History.push([root.pagePrefix[0]])
+                contentItem: ListLabel { text: categoryButton.text; color: theme.fg.secondary; font.weight: Font.Normal }
+                background: Rectangle {
+                    color: categoryButton.hovered ? theme.bg.secondary : "transparent"
+                    border.color: categoryButton.visualFocus ? theme.visualFocus : "transparent"
+                    radius: MainCtx.dp(4, VLCStyle.scale)
+                }
+                Navigation.parentItem: defaultPageHeader
+            }
+
+            Image {
+                visible: categoryButton.visible
+                Layout.preferredWidth: MainCtx.dp(12, VLCStyle.scale)
+                Layout.preferredHeight: MainCtx.dp(12, VLCStyle.scale)
+                rotation: -90
+                source: SVGColorImage.colorize("qrc:/redesign/icons/settings-chevron.svg")
+                    .any({"#8F8F8F": theme.fg.secondary}).uri()
+            }
 
             SubtitleLabel {
                 id: label
 
                 Layout.fillWidth: true
 
-                color: theme.fg.primary
+                color: theme.fg.secondary
+                font.pixelSize: MainCtx.dp(16, VLCStyle.scale)
+                font.weight: Font.Normal
+                elide: Text.ElideRight
+            }
+
+            ListLabel {
+                visible: root.displayedItemCount >= 0
+                // "items" comes from the Figma header; the count is the model's.
+                text: (root.displayedItemCount === 1 ? qsTr("%1 item") : qsTr("%1 items"))
+                    .arg(root.displayedItemCount)
+                color: theme.fg.secondary
+                font.pixelSize: MainCtx.dp(12, VLCStyle.scale)
+                font.weight: Font.Normal
             }
 
             GridSortFilterControls {
@@ -191,6 +266,18 @@ T.Page {
                 sort: _sortCtx
                 search: _searchCtx
                 Navigation.parentItem: defaultPageHeader
+            }
+            IconToolButton {
+                text: VLCIcons.more
+                iconSource: "qrc:/redesign/icons/library-more.svg"
+                mirrorIcon: true
+                description: qsTr("Menu")
+                Layout.preferredWidth: MainCtx.dp(24, VLCStyle.scale)
+                Layout.preferredHeight: MainCtx.dp(32, VLCStyle.scale)
+                checked: pageMenu.shown
+                onClicked: pageMenu.popup(mapToGlobal(0, height))
+                Navigation.parentItem: defaultPageHeader
+                QmlGlobalMenu { id: pageMenu; ctx: MainCtx }
             }
         }
     }

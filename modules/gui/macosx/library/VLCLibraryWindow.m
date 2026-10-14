@@ -41,6 +41,7 @@
 #import "library/VLCLibraryAbstractMediaLibrarySegmentViewController.h"
 #import "library/VLCLibraryCollectionViewSupplementaryElementView.h"
 #import "library/VLCLibraryController.h"
+#import "library/VLCLibraryNavigationData.h"
 #import "library/VLCLibraryDynamicToolbarFlagsCapable.h"
 #import "library/VLCLibraryDynamicViewModeCapable.h"
 #import "library/VLCLibraryModel.h"
@@ -117,6 +118,12 @@ NSString * const VLCLibraryWindowEmbeddedVideoPlaybackActiveKey = @"embeddedVide
 }
 
 @property NSTimer *searchInputTimer;
+@property NSMutableArray<NSDictionary *> *libraryNavigationStates;
+@property NSInteger libraryNavigationIndex;
+@property BOOL restoringLibraryNavigation;
+@property NSUInteger libraryNavigationMutationDepth;
+@property id<VLCMediaLibraryItemProtocol> navigationLibraryItem;
+@property NSURL *navigationFolder;
 
 @end
 
@@ -171,11 +178,24 @@ static int ShowController(vlc_object_t * __unused p_this,
     VLCMain *mainInstance = VLCMain.sharedInstance;
     _playQueueController = [mainInstance playQueueController];
 
+    // The redesigned library uses ordinary views for its header and background.
+    // Accept file drops there as well as in the existing video and Queue targets.
+    [self registerForDraggedTypes:@[
+        VLCMediaLibraryMediaItemPasteboardType,
+        VLCMediaLibraryMediaItemUTI,
+        NSPasteboardTypeURL,
+        NSPasteboardTypeFileURL,
+        NSPasteboardTypeString,
+        NSFilenamesPboardType
+    ]];
+
     libvlc_int_t *libvlc = vlc_object_instance(getIntf());
     var_AddCallback(libvlc, "intf-toggle-fscontrol", ShowFullscreenController, (__bridge void *)self);
     var_AddCallback(libvlc, "intf-show", ShowController, (__bridge void *)self);
 
     _libraryTargetView = [[NSView alloc] init];
+    _libraryNavigationStates = [NSMutableArray array];
+    _libraryNavigationIndex = -1;
 
     self.videoViewController.view.frame = self.mainSplitView.frame;
     self.videoViewController.view.hidden = YES;
@@ -205,6 +225,7 @@ static int ShowController(vlc_object_t * __unused p_this,
                              object:nil];
 
     [self setViewForSelectedSegment];
+    [self recordLibraryNavigation];
     [self setupLoadingOverlayView];
 
     self.librarySearchField.delegate = self;
@@ -212,6 +233,7 @@ static int ShowController(vlc_object_t * __unused p_this,
 
 - (void)dealloc
 {
+    [self unregisterDraggedTypes];
     [NSNotificationCenter.defaultCenter removeObserver:self];
     libvlc_int_t *libvlc = vlc_object_instance(getIntf());
     var_DelCallback(libvlc, "intf-toggle-fscontrol", ShowFullscreenController, (__bridge void *)self);
@@ -278,6 +300,7 @@ static int ShowController(vlc_object_t * __unused p_this,
         flags = segment.toolbarDisplayFlags;
     }
     [self.toolbarDelegate applyVisiblityFlags:flags];
+    [self updateLibraryNavigationControls];
 }
 
 - (void)setViewForSelectedSegment
@@ -305,8 +328,85 @@ static int ShowController(vlc_object_t * __unused p_this,
     }
 
     _librarySegmentType = segmentType;
+    self.navigationLibraryItem = nil;
+    self.navigationFolder = nil;
     [self setViewForSelectedSegment];
     [self updateGridVsListViewModeSegmentedControl];
+    [self.splitViewController.navSidebarViewController synchronizeSelectedSegment:segmentType];
+    [self recordLibraryNavigation];
+}
+
+- (void)recordLibraryNavigation
+{
+    if (self.libraryNavigationStates == nil || self.restoringLibraryNavigation || self.libraryNavigationMutationDepth > 0) return;
+    NSDictionary *state = @{@"segment":@(self.librarySegmentType), @"item":(id)self.navigationLibraryItem ?: NSNull.null, @"folder":self.navigationFolder ?: NSNull.null};
+    if (self.libraryNavigationIndex >= 0 && [self.libraryNavigationStates[self.libraryNavigationIndex] isEqual:state]) { [self updateLibraryNavigationControls]; return; }
+    while (self.libraryNavigationStates.count > self.libraryNavigationIndex + 1) [self.libraryNavigationStates removeLastObject];
+    [self.libraryNavigationStates addObject:state];
+    self.libraryNavigationIndex = self.libraryNavigationStates.count - 1;
+    [self updateLibraryNavigationControls];
+}
+- (void)restoreLibraryNavigation
+{
+    if (self.libraryNavigationIndex < 0 || self.libraryNavigationIndex >= self.libraryNavigationStates.count) return;
+    NSDictionary *state = self.libraryNavigationStates[self.libraryNavigationIndex];
+    self.restoringLibraryNavigation = YES;
+    id item = state[@"item"] == NSNull.null ? nil : state[@"item"];
+    NSURL *folder = state[@"folder"] == NSNull.null ? nil : state[@"folder"];
+    BOOL sameSegment = self.librarySegmentType == [state[@"segment"] integerValue];
+    self.librarySegmentType = [state[@"segment"] integerValue];
+    if (item) [self presentLibraryItem:item]; else if (folder) [self browseFolderByMrl:folder.absoluteString];
+    else {
+        // Back from a collection to its category can retain the same segment.
+        // Restore the category view as well as its selected navigation row.
+        self.navigationLibraryItem = nil;
+        self.navigationFolder = nil;
+        if (sameSegment) {
+            [self setViewForSelectedSegment];
+            [self updateGridVsListViewModeSegmentedControl];
+        }
+        [self.splitViewController.navSidebarViewController selectSegment:self.librarySegmentType];
+    }
+    self.restoringLibraryNavigation = NO;
+    [self updateLibraryNavigationControls];
+}
+- (void)updateLibraryNavigationControls
+{
+    BOOL backwards = self.libraryNavigationIndex > 0;
+    BOOL forwards = self.libraryNavigationIndex >= 0 && self.libraryNavigationIndex + 1 < self.libraryNavigationStates.count;
+    if ([self.librarySegmentViewController isKindOfClass:VLCLibraryMediaSourceViewController.class]) {
+        VLCLibraryMediaSourceViewNavigationStack *stack = [(VLCLibraryMediaSourceViewController *)self.librarySegmentViewController navigationStack];
+        backwards |= stack.backwardsAvailable; forwards |= stack.forwardsAvailable;
+    }
+    self.backwardsNavigationButton.enabled = backwards || self.embeddedVideoPlaybackActive;
+    self.forwardsNavigationButton.enabled = forwards;
+    if ([self.librarySegmentViewController isKindOfClass:VLCLibraryHomeViewController.class])
+        [(VLCLibraryHomeViewController *)self.librarySegmentViewController updateNavigationControls];
+    NSString *category = [VLCLibrarySegment segmentWithSegmentType:self.librarySegmentType].displayString ?: @"";
+    NSString *selection = self.navigationFolder ? self.navigationFolder.lastPathComponent : self.navigationLibraryItem.displayString;
+    NSString *title = selection.length ? [NSString stringWithFormat:@"%@ / %@", category, selection] : category;
+    VLCLibraryModel *model = VLCMain.sharedInstance.libraryController.libraryModel;
+    NSNumber *count = nil;
+    if ([self.navigationLibraryItem isKindOfClass:VLCMediaLibraryPlaylist.class]) count = @([(VLCMediaLibraryPlaylist *)self.navigationLibraryItem numberOfMedia]);
+    else if ([self.navigationLibraryItem conformsToProtocol:@protocol(VLCMediaLibraryAudioGroupProtocol)]) count = @([(id<VLCMediaLibraryAudioGroupProtocol>)self.navigationLibraryItem numberOfTracks]);
+    else if ([self.navigationLibraryItem isKindOfClass:VLCMediaLibraryGroup.class]) count = @([(VLCMediaLibraryGroup *)self.navigationLibraryItem numberOfTotalItems]);
+    else if (!self.navigationFolder && !self.navigationLibraryItem && model) {
+        switch (self.librarySegmentType) {
+            case VLCLibraryHomeSegmentType: count = @(model.numberOfVideoMedia + model.numberOfAudioMedia); break;
+            case VLCLibraryVideoSegmentType: count = @(model.numberOfVideoMedia); break;
+            case VLCLibraryMusicSegmentType: case VLCLibrarySongsMusicSubSegmentType: count = @(model.numberOfAudioMedia); break;
+            case VLCLibraryArtistsMusicSubSegmentType: count = @(model.numberOfArtists); break;
+            case VLCLibraryAlbumsMusicSubSegmentType: count = @(model.numberOfAlbums); break;
+            case VLCLibraryGenresMusicSubSegmentType: count = @(model.numberOfGenres); break;
+            case VLCLibraryGroupsSegmentType: count = @(model.numberOfGroups); break;
+            case VLCLibraryPlaylistsSegmentType: count = @([model numberOfPlaylistsOfType:VLC_ML_PLAYLIST_TYPE_ALL]); break;
+            case VLCLibraryPlaylistsMusicOnlyPlaylistsSubSegmentType: count = @([model numberOfPlaylistsOfType:VLC_ML_PLAYLIST_TYPE_AUDIO_ONLY]); break;
+            case VLCLibraryPlaylistsVideoOnlyPlaylistsSubSegmentType: count = @([model numberOfPlaylistsOfType:VLC_ML_PLAYLIST_TYPE_VIDEO_ONLY]); break;
+            case VLCLibraryRecentSegmentType: count = @(VLCMediaLibraryRecentItems(model).count); break;
+            default: break;
+        }
+    }
+    [self.toolbarDelegate updateLibraryHeaderWithTitle:title count:count];
 }
 
 - (IBAction)gridVsListSegmentedControlAction:(id)sender
@@ -386,16 +486,28 @@ static int ShowController(vlc_object_t * __unused p_this,
 - (void)presentLibraryItem:(id<VLCMediaLibraryItemProtocol>)libraryItem
 {
     VLCLibrarySegment * const segment = [VLCLibrarySegment segmentForLibraryItem:libraryItem];
+    if (segment == nil) return;
+    ++self.libraryNavigationMutationDepth;
     [self.splitViewController.navSidebarViewController selectSegment:segment.segmentType];
     if ([self.librarySegmentViewController conformsToProtocol:@protocol(VLCLibraryItemPresentingCapable)]) {
         [(VLCLibraryAbstractSegmentViewController<VLCLibraryItemPresentingCapable> *)self.librarySegmentViewController presentLibraryItem:libraryItem];
     }
+    self.navigationLibraryItem = libraryItem;
+    self.navigationFolder = nil;
+    --self.libraryNavigationMutationDepth;
+    [self recordLibraryNavigation];
+    if (!self.restoringLibraryNavigation) [VLCLibraryNavigationData.sharedInstance recordVisitToItem:libraryItem];
 }
 
 - (void)browseFolderByMrl:(NSString *)mrl
 {
+    ++self.libraryNavigationMutationDepth;
     [self goToBrowseSection:self];
     [(VLCLibraryMediaSourceViewController *)self.librarySegmentViewController browseFolderByMrl:mrl];
+    self.navigationFolder = [NSURL URLWithString:mrl]; self.navigationLibraryItem = nil;
+    --self.libraryNavigationMutationDepth;
+    [self recordLibraryNavigation];
+    if (!self.restoringLibraryNavigation && self.navigationFolder) [VLCLibraryNavigationData.sharedInstance recordVisitToItem:self.navigationFolder];
 }
 
 - (IBAction)sortLibrary:(id)sender
@@ -448,8 +560,29 @@ static int ShowController(vlc_object_t * __unused p_this,
     [self updateFilterString];
 }
 
+- (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)sender
+{
+    VLCMain *owner = VLCMain.sharedInstance;
+    if (owner == nil || owner.isTerminating) return NSDragOperationNone;
+    NSDragOperation mask = sender.draggingSourceOperationMask;
+    return (mask & (NSDragOperationCopy | NSDragOperationGeneric)) ? NSDragOperationCopy : NSDragOperationNone;
+}
+
+- (BOOL)prepareForDragOperation:(id<NSDraggingInfo>)sender
+{
+    VLCMain *owner = VLCMain.sharedInstance;
+    return owner != nil && !owner.isTerminating && sender.draggingPasteboard != nil;
+}
+
+- (BOOL)performDragOperation:(id<NSDraggingInfo>)sender
+{
+    return [self handlePasteBoardFromDragSession:sender.draggingPasteboard];
+}
+
 - (BOOL)handlePasteBoardFromDragSession:(NSPasteboard *)paste
 {
+    VLCMain *owner = VLCMain.sharedInstance;
+    if (owner == nil || owner.isTerminating || paste == nil) return NO;
     return [VLCFileDragRecognisingView handlePasteboardFromDragSessionAsPlayQueueItems:paste];
 }
 
@@ -460,14 +593,17 @@ static int ShowController(vlc_object_t * __unused p_this,
 
 - (IBAction)backwardsNavigationAction:(id)sender
 {
-    !self.embeddedVideoPlaybackActive
-        ? [((VLCLibraryMediaSourceViewController *)self.librarySegmentViewController).navigationStack backwards]
-        : [self disableVideoPlaybackAppearance];
+    if (self.embeddedVideoPlaybackActive) { [self disableVideoPlaybackAppearance]; return; }
+    if ([self.librarySegmentViewController isKindOfClass:VLCLibraryMediaSourceViewController.class] && [(VLCLibraryMediaSourceViewController *)self.librarySegmentViewController navigationStack].backwardsAvailable)
+        [[(VLCLibraryMediaSourceViewController *)self.librarySegmentViewController navigationStack] backwards];
+    else if (self.libraryNavigationIndex > 0) { --self.libraryNavigationIndex; [self restoreLibraryNavigation]; }
 }
 
 - (IBAction)forwardsNavigationAction:(id)sender
 {
-    [((VLCLibraryMediaSourceViewController *)self.librarySegmentViewController).navigationStack forwards];
+    if ([self.librarySegmentViewController isKindOfClass:VLCLibraryMediaSourceViewController.class] && [(VLCLibraryMediaSourceViewController *)self.librarySegmentViewController navigationStack].forwardsAvailable)
+        [[(VLCLibraryMediaSourceViewController *)self.librarySegmentViewController navigationStack] forwards];
+    else if (self.libraryNavigationIndex + 1 < self.libraryNavigationStates.count) { ++self.libraryNavigationIndex; [self restoreLibraryNavigation]; }
 }
 
 #pragma mark - video output controlling
@@ -619,6 +755,9 @@ static int ShowController(vlc_object_t * __unused p_this,
     NSView * const videoView = self.videoViewController.view;
     videoView.translatesAutoresizingMaskIntoConstraints = NO;
     videoView.hidden = NO;
+    // The library rail can temporarily leave less space than the player's window minimum.
+    // Prepare the existing controls before mounting their required layout constraints.
+    [self.videoViewController prepareControlsForWidth:NSWidth(_libraryTargetView.bounds)];
 
     [_libraryTargetView addSubview:videoView];
     [videoView applyConstraintsToFillSuperview];
@@ -643,16 +782,8 @@ static int ShowController(vlc_object_t * __unused p_this,
         return;
     }
 
-    NSAppearance *darkAppearance = nil;
-    if (@available(macOS 10.14, *)) {
-        darkAppearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
-    } else {
-        darkAppearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark];
-    }
-
-    if (darkAppearance) {
-        self.appearance = darkAppearance;
-    }
+    // Preserve the GUI theme selected in onboarding or General when video is reattached.
+    self.appearance = NSApp.appearance;
 
     if (_acquiredVideoView) {
         [self.videoViewController returnVideoView:_acquiredVideoView];

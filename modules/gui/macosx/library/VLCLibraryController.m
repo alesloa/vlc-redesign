@@ -32,6 +32,7 @@
 #import "library/VLCInputItem.h"
 #import "library/VLCLibraryModel.h"
 #import "library/VLCLibraryDataTypes.h"
+#import "library/VLCLibraryMediaCollectionController.h"
 #import "library/VLCMediaLibraryFolderObserver.h"
 
 #import "playqueue/VLCPlayQueueItem.h"
@@ -138,7 +139,7 @@ typedef int (*folder_action_f)(vlc_medialibrary_t*, const char*);
     if (!_p_libraryInstance) {
         return VLC_EACCES;
     }
-    input_item_t *p_inputItem = vlc_ml_get_input_item(_p_libraryInstance, mediaItem.libraryID);
+    input_item_t *p_inputItem = VLCMediaLibraryInputItemWithStoredTracks(_p_libraryInstance, mediaItem.libraryID);
     if (!p_inputItem) {
         msg_Err(getIntf(), "No input item found for media id %lli", mediaItem.libraryID);
         return VLC_ENOENT;
@@ -259,34 +260,81 @@ typedef int (*folder_action_f)(vlc_medialibrary_t*, const char*);
 
 - (void)showCreatePlaylistDialogForPlayQueueItems:(NSArray<VLCPlayQueueItem *> *)items
 {
-    if (!items || items.count == 0) {
-        return;
-    }
-
-    NSString * const playlistName = [self runCreatePlaylistDialog];
-    if (!playlistName) {
-        return;
-    }
-
-    if (![self createPlaylistWithName:playlistName fromPlayQueueItems:items]) {
-        msg_Err(getIntf(), "Failed to create playlist '%s' from play queue items", playlistName.UTF8String);
-    }
+    NSMutableArray *URLs = [NSMutableArray array];
+    for (VLCPlayQueueItem *item in items) if (item.url) [URLs addObject:item.url];
+    [self showCreatePlaylistDialogWithURLs:URLs];
 }
 
 - (void)showCreatePlaylistDialogForMediaItems:(NSArray<VLCMediaLibraryMediaItem *> *)mediaItems
 {
-    if (!mediaItems || mediaItems.count == 0) {
-        return;
-    }
+    NSMutableArray *URLs = [NSMutableArray array];
+    for (VLCMediaLibraryMediaItem *item in mediaItems) for (VLCMediaLibraryFile *file in item.files)
+        if (file.fileType == VLC_ML_FILE_TYPE_MAIN && file.fileURL) { [URLs addObject:file.fileURL]; break; }
+    [self showCreatePlaylistDialogWithURLs:URLs];
+}
 
-    NSString * const playlistName = [self runCreatePlaylistDialog];
-    if (!playlistName) {
-        return;
-    }
+- (void)showCreatePlaylistDialogWithURLs:(NSArray<NSURL *> *)URLs
+{
+    if (!_p_libraryInstance) return;
+    VLCLibraryMediaCollectionController *dialog = [[VLCLibraryMediaCollectionController alloc] initForNetwork:NO initialURLs:URLs];
+    while (!VLCMain.sharedInstance.isTerminating && [dialog runModal] == NSModalResponseOK)
+        if ([self createPlaylistWithName:dialog.playlistName mediaURLs:dialog.mediaURLs coverURL:dialog.coverURL]) break;
+}
 
-    if (![self createPlaylistWithName:playlistName fromMediaItems:mediaItems]) {
-        msg_Err(getIntf(), "Failed to create playlist '%s' from media items", playlistName.UTF8String);
+- (void)showCollectionResult:(int)result
+{
+    NSAlert *alert = [[NSAlert alloc] init]; alert.messageText = @(result).stringValue;
+    [alert addButtonWithTitle:_NS("OK")]; [alert runModal];
+}
+
+- (BOOL)createPlaylistWithName:(NSString *)name mediaURLs:(NSArray<NSURL *> *)URLs coverURL:(NSURL *)coverURL
+{
+    VLCMain *owner = VLCMain.sharedInstance;
+    if (!_p_libraryInstance || !name.length || !owner || owner.isTerminating) return NO;
+    NSMutableArray<NSNumber *> *mediaIDs = [NSMutableArray array];
+    for (NSURL *url in URLs) {
+        // A queue/library selection usually already has an ML identity. The
+        // create API rejects that URI; retain its original identity and order.
+        __attribute__((objc_precise_lifetime)) NSString *mrlString = url.absoluteString;
+        const char *mrl = mrlString.UTF8String;
+        vlc_ml_media_t *media = vlc_ml_get_media_by_mrl(_p_libraryInstance, mrl);
+        if (!media) {
+            int result = vlc_ml_control(_p_libraryInstance,
+                url.isFileURL ? VLC_ML_NEW_EXTERNAL_MEDIA : VLC_ML_NEW_STREAM, mrl, &media);
+            // A scan can register the same URI between lookup and creation.
+            if (!media) media = vlc_ml_get_media_by_mrl(_p_libraryInstance, mrl);
+            if (!media && result != VLC_SUCCESS) {
+                [self showCollectionResult:result]; return NO;
+            }
+        }
+        if (!media) return NO;
+        [mediaIDs addObject:@(media->i_id)]; vlc_ml_media_release(media);
     }
+    vlc_ml_playlist_t *playlist = NULL;
+    int createResult = vlc_ml_control(_p_libraryInstance, VLC_ML_PLAYLIST_CREATE, name.UTF8String, &playlist);
+    if (createResult != VLC_SUCCESS) { [self showCollectionResult:createResult]; return NO; }
+    if (!playlist) return NO;
+    int64_t playlistID = playlist->i_id; vlc_ml_playlist_release(playlist);
+    for (NSNumber *mediaID in mediaIDs) {
+        int64_t value = mediaID.longLongValue;
+        int result = vlc_ml_playlist_append(_p_libraryInstance, playlistID, &value, 1);
+        if (result != VLC_SUCCESS) {
+            // Remove only the ID created by this attempted Save. A retry must
+            // not leave a partial playlist behind or affect an existing one.
+            vlc_ml_playlist_delete(_p_libraryInstance, playlistID);
+            // The ML API supplies a result code, without explanatory error copy.
+            [self showCollectionResult:result]; return NO;
+        }
+    }
+    if (coverURL.isFileURL) {
+        // A GUI preference stores the owner's actual cover URL against the API's
+        // real playlist ID. No media-library schema or playback state changes.
+        NSString *key = [NSString stringWithFormat:@"VLCRedesignPlaylistCover.%lld", playlistID];
+        [NSUserDefaults.standardUserDefaults setObject:coverURL.absoluteString forKey:key];
+        VLCMediaLibraryPlaylist *updated = [VLCMediaLibraryPlaylist playlistForLibraryID:playlistID];
+        if (updated) [NSNotificationCenter.defaultCenter postNotificationName:VLCLibraryModelPlaylistUpdated object:updated];
+    }
+    return YES;
 }
 
 - (void)showRenamePlaylistDialogForPlaylist:(VLCMediaLibraryPlaylist *)playlist

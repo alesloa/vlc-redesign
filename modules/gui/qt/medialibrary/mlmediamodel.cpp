@@ -111,6 +111,7 @@ vlc_ml_sorting_criteria_t MLMediaModel::nameToCriteria(QByteArray name) const
     return QHash<QByteArray, vlc_ml_sorting_criteria_t> {
         {QByteArrayLiteral("title"), VLC_ML_SORTING_ALPHA},
         {QByteArrayLiteral("duration"), VLC_ML_SORTING_DURATION},
+        {QByteArrayLiteral("playcount"), VLC_ML_SORTING_PLAYCOUNT},
         {QByteArrayLiteral("insertion"), VLC_ML_SORTING_INSERTIONDATE},
     }.value(name, VLC_ML_SORTING_DEFAULT);
 }

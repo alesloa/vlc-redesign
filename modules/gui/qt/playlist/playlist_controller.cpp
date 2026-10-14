@@ -743,6 +743,21 @@ void PlaylistController::goTo(uint index, bool startPlaying)
         vlc_playlist_Start( d->m_playlist );
 }
 
+void PlaylistController::goToItem(const PlaylistItem& item, bool startPlaying)
+{
+    if (!item)
+        return;
+    Q_D(PlaylistController);
+    vlc_playlist_locker lock{ d->m_playlist };
+    // Source: the original playlist API resolves the retained item under its
+    // lock. A removed item leaves the current selection and playback unchanged.
+    const auto index = vlc_playlist_IndexOf(d->m_playlist, item.raw());
+    if (index < 0)
+        return;
+    if (vlc_playlist_GoTo(d->m_playlist, index) == VLC_SUCCESS && startPlaying)
+        vlc_playlist_Start(d->m_playlist);
+}
+
 bool PlaylistController::isRandom() const
 {
     Q_D(const PlaylistController);

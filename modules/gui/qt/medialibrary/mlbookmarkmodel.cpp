@@ -31,6 +31,7 @@
 #include "util/shared_input_item.hpp"
 #include "util/vlctick.hpp"
 #include "player/player_controller.hpp"
+#include <QPointer>
 
 MLBookmarkModel::MLBookmarkModel( QObject *parent )
     : QAbstractListModel( parent )
@@ -92,9 +93,9 @@ bool MLBookmarkModel::setData(const QModelIndex &index, const QVariant &value, i
         return false;
 
     size_t row = index.row();
-    bool updateName = (index.column() == 0);
+    bool updateName = (role == BookmarkRoles::NameRole);
 
-    if ( ! m_bookmarks || row >= m_bookmarks->i_nb_items )
+    if ( !m_mediaLib || !m_bookmarks || row >= m_bookmarks->i_nb_items )
         return false;
 
     auto& b = m_bookmarks->p_items[row];
@@ -116,13 +117,24 @@ bool MLBookmarkModel::setData(const QModelIndex &index, const QVariant &value, i
         ctx.updateSucceed = (ret == VLC_SUCCESS);
     },
     //UI thread
-    [this, updateName, mediaId = m_currentMediaId, row, str]
+    [this, updateName, mediaId = b.i_media_id, bookmarkTime = b.i_time, str]
     (quint64, Ctx& ctx)
     {
         if (!ctx.updateSucceed)
             return;
 
-        if (m_currentMediaId != mediaId)
+        if (m_currentMediaId != static_cast<uint64_t>(mediaId) || !m_bookmarks)
+            return;
+
+        // The list may have been refreshed, sorted, or had rows removed while
+        // the ML operation was running. Update the original bookmark by its
+        // source identity rather than dereferencing a stale row number.
+        uint32_t row = 0;
+        while (row < m_bookmarks->i_nb_items &&
+               (m_bookmarks->p_items[row].i_media_id != mediaId ||
+                m_bookmarks->p_items[row].i_time != bookmarkTime))
+            ++row;
+        if (row == m_bookmarks->i_nb_items)
             return;
 
         auto& b = m_bookmarks->p_items[row];
@@ -242,41 +254,78 @@ void MLBookmarkModel::sort( int column, Qt::SortOrder order )
 
 void MLBookmarkModel::add()
 {
+    if (!m_player || !m_mediaLib)
+        return;
     vlc_tick_t currentTime;
+    QString mediaUri;
+    uint64_t revision;
     {
         vlc_player_locker lock{ m_player };
         currentTime = vlc_player_GetTime( m_player );
+        auto currentItem = vlc_player_GetCurrentMedia(m_player);
+        if (currentTime == VLC_TICK_INVALID || !currentItem || !currentItem->psz_uri)
+            return;
+        mediaUri = qfu(currentItem->psz_uri);
+        vlc::threads::mutex_locker selflock{m_mutex};
+        revision = m_revision;
     }
 
-    if (m_currentMediaId == 0)
+    if (mediaUri.isEmpty())
         return;
 
-    m_mediaLib->runOnMLThread(this,
+    struct Ctx { uint64_t mediaId = 0; };
+    // An early shortcut can precede this view's asynchronous ID lookup.
+    // Resolve the captured input URI/time, never a stale row or later input.
+    // The library owns the operation so closing the initiating view does not
+    // cancel a bookmark the user already requested.
+    m_mediaLib->runOnMLThread<Ctx>(m_mediaLib,
     //ML thread
-    [mediaId = m_currentMediaId, currentTime, count = rowCount()](vlc_medialibrary_t* ml)
+    [mediaUri, currentTime](vlc_medialibrary_t* ml, Ctx& ctx)
     {
-        int64_t time = MS_FROM_VLC_TICK(currentTime);
-
-        vlc_ml_media_add_bookmark(ml, mediaId, time);
-
-        ml_unique_ptr<vlc_ml_media_t> media { vlc_ml_get_media(ml, mediaId) };
-
-        if (media)
-        {
-            QString name = qtr("Bookmark at %1").arg(VLCDuration::fromMS( time ).formatHMS());
-
-            vlc_ml_media_update_bookmark(ml, mediaId, time, qtu(name), nullptr);
-        }
+        ml_unique_ptr<vlc_ml_media_t> media{vlc_ml_get_media_by_mrl(ml, qtu(mediaUri))};
+        if (!media)
+            media.reset(vlc_ml_new_external_media(ml, qtu(mediaUri)));
+        if (!media)
+            media.reset(vlc_ml_get_media_by_mrl(ml, qtu(mediaUri)));
+        if (!media || media->i_id <= 0)
+            return;
+        const int64_t time = MS_FROM_VLC_TICK(currentTime);
+        // The existing backend can report VLC_EGENERIC after successfully
+        // inserting a bookmark. Use its actual scoped list as the result.
+        vlc_ml_media_add_bookmark(ml, media->i_id, time);
+        const auto query = vlc_ml_query_params_create();
+        BookmarkListPtr bookmarks{vlc_ml_list_media_bookmarks(ml, &query, media->i_id)};
+        bool stored = false;
+        if (bookmarks)
+            for (uint32_t i = 0; i < bookmarks->i_nb_items; ++i)
+                if (bookmarks->p_items[i].i_time == time)
+                {
+                    stored = true;
+                    break;
+                }
+        if (!stored)
+            return;
+        ctx.mediaId = media->i_id;
+        const QString name = qtr("Bookmark at %1").arg(VLCDuration::fromMS(time).formatHMS());
+        vlc_ml_media_update_bookmark(ml, media->i_id, time, qtu(name), nullptr);
     },
     //UI thread
-    [this](){
-        refresh( MLBOOKMARKMODEL_REFRESH );
+    [guard = QPointer<MLBookmarkModel>(this), revision](quint64, Ctx& ctx) {
+        if (!guard || !ctx.mediaId)
+            return;
+        {
+            vlc::threads::mutex_locker lock{guard->m_mutex};
+            if (guard->m_revision != revision)
+                return;
+        }
+        guard->m_currentMediaId = ctx.mediaId;
+        guard->refresh(MLBOOKMARKMODEL_REFRESH);
     });
 }
 
 void MLBookmarkModel::remove( const QModelIndexList &indexes )
 {
-    if (m_currentMediaId == 0)
+    if (!m_mediaLib || !m_bookmarks || m_currentMediaId == 0)
         return;
 
     std::vector<int64_t> bookmarkTimeList;
@@ -304,7 +353,7 @@ void MLBookmarkModel::remove( const QModelIndexList &indexes )
 
 void MLBookmarkModel::clear()
 {
-    if (m_currentMediaId == 0)
+    if (!m_mediaLib || m_currentMediaId == 0)
         return;
 
     m_mediaLib->runOnMLThread(this,
@@ -327,7 +376,8 @@ void MLBookmarkModel::clear()
 
 void MLBookmarkModel::select(const QModelIndex &index)
 {
-    if ( index.isValid() == false )
+    if (!m_player || !m_bookmarks || !index.isValid() || index.row() < 0 ||
+        static_cast<size_t>(index.row()) >= m_bookmarks->i_nb_items)
         return;
     const auto& b = m_bookmarks->p_items[index.row()];
     vlc_player_locker lock{ m_player };
@@ -369,10 +419,17 @@ void MLBookmarkModel::onPlaybackStateChanged( vlc_player_t *, vlc_player_state s
 {
     auto self = static_cast<MLBookmarkModel*>( data );
 
-    if(self->m_currentMediaId == 0)
-        return;
-
-    QMetaObject::invokeMethod(self, [self, state](){
+    uint64_t revision;
+    {
+        vlc::threads::mutex_locker lock{self->m_mutex};
+        revision = self->m_revision;
+    }
+    QMetaObject::invokeMethod(self, [self, state, revision](){
+        {
+            vlc::threads::mutex_locker lock{self->m_mutex};
+            if (self->m_revision != revision)
+                return;
+        }
         if ( state == VLC_PLAYER_STATE_STARTED )
             self->refresh( MLBOOKMARKMODEL_REFRESH );
         else if ( state == VLC_PLAYER_STATE_STOPPING )
@@ -383,20 +440,25 @@ void MLBookmarkModel::onPlaybackStateChanged( vlc_player_t *, vlc_player_state s
 
 void MLBookmarkModel::updateMediaId(uint64_t revision, const QString &mediaUri)
 {
+    {
+        vlc::threads::mutex_locker lock{m_mutex};
+        if (m_revision != revision)
+            return;
+    }
+    m_currentMediaId = 0;
+    refresh(MLBOOKMARKMODEL_CLEAR);
     if (mediaUri.isEmpty())
     {
-        refresh(MLBOOKMARKMODEL_CLEAR);
         return;
     }
 
     //retrieve the media id in the medialib
     struct Ctx{
         uint64_t newMLid = 0;
-        BookmarkListPtr newBookmarks;
     };
     m_mediaLib->runOnMLThread<Ctx>(this,
     //ML thread
-    [mediaUri, sort = m_sort, desc = m_desc](vlc_medialibrary_t* ml, Ctx& ctx){
+    [mediaUri](vlc_medialibrary_t* ml, Ctx& ctx){
 
         auto mlMedia = vlc_ml_get_media_by_mrl( ml, qtu(mediaUri) );
         if ( mlMedia != nullptr )
@@ -404,10 +466,6 @@ void MLBookmarkModel::updateMediaId(uint64_t revision, const QString &mediaUri)
             ctx.newMLid = mlMedia->i_id;
             vlc_ml_release( mlMedia );
         }
-        vlc_ml_query_params_t params = vlc_ml_query_params_create();
-        params.i_sort = sort;
-        params.b_desc = desc;
-        ctx.newBookmarks.reset( vlc_ml_list_media_bookmarks( ml, &params, ctx.newMLid ) );
     },
     //UI thread
     [this, revision](quint64, Ctx& ctx) {
@@ -417,19 +475,17 @@ void MLBookmarkModel::updateMediaId(uint64_t revision, const QString &mediaUri)
             //did we start playing a new media in between
             valid = (m_revision == revision);
         }
-        if (valid)
+        if (valid && (ctx.newMLid != 0 || m_currentMediaId == 0))
         {
-            beginResetModel();
-            m_bookmarks = std::move(ctx.newBookmarks);
             m_currentMediaId = ctx.newMLid;
             refresh(MLBOOKMARKMODEL_REFRESH);
-            endResetModel();
         }
     });
 }
 
 void MLBookmarkModel::refresh(MLBookmarkModel::RefreshOperation forceClear )
 {
+    const uint64_t refreshRevision = ++m_refreshRevision;
     if (m_currentMediaId == 0 || forceClear == MLBOOKMARKMODEL_CLEAR)
     {
         beginResetModel();
@@ -439,6 +495,11 @@ void MLBookmarkModel::refresh(MLBookmarkModel::RefreshOperation forceClear )
     else
     {
         uint64_t mediaId = m_currentMediaId;
+        uint64_t revision;
+        {
+            vlc::threads::mutex_locker lock{m_mutex};
+            revision = m_revision;
+        }
         struct Ctx
         {
             BookmarkListPtr newBookmarks;
@@ -453,13 +514,17 @@ void MLBookmarkModel::refresh(MLBookmarkModel::RefreshOperation forceClear )
             ctx.newBookmarks.reset( vlc_ml_list_media_bookmarks( ml, &params, mediaId ) );
         },
         //UI thread
-        [this, mediaId](quint64, Ctx& ctx)
+        [this, mediaId, revision, refreshRevision](quint64, Ctx& ctx)
         {
+            if (m_currentMediaId != mediaId || m_refreshRevision != refreshRevision)
+                return;
+            {
+                vlc::threads::mutex_locker lock{m_mutex};
+                if (m_revision != revision)
+                    return;
+            }
             beginResetModel();
-            if (m_currentMediaId == mediaId)
-                m_bookmarks = std::move(ctx.newBookmarks);
-            else
-                m_bookmarks.reset();
+            m_bookmarks = std::move(ctx.newBookmarks);
             endResetModel();
         });
     }

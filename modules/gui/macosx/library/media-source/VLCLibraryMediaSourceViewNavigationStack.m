@@ -211,8 +211,7 @@
         return;
     }
 
-    self.libraryWindow.forwardsNavigationButton.enabled = self.forwardsAvailable;
-    self.libraryWindow.backwardsNavigationButton.enabled = self.backwardsAvailable;
+    [self.libraryWindow updateLibraryNavigationControls];
 }
 
 - (void)setMediaSourceViewToState:(VLCLibraryMediaSourceViewNavigationState *)state

@@ -64,6 +64,7 @@ T.Control {
 
     // Optional
     property var contextMenu
+    property bool compact: false
 
     // Optional, an item to show as drag target
     property Item dragItem
@@ -78,9 +79,9 @@ T.Control {
 
     hoverEnabled: true
 
-    verticalPadding: VLCStyle.margin_xxxsmall
+    verticalPadding: compact ? 0 : VLCStyle.margin_xsmall
 
-    leftPadding: VLCStyle.margin_normal
+    leftPadding: compact ? 0 : VLCStyle.margin_normal
 
     rightPadding: VLCStyle.margin_normal
 
@@ -133,13 +134,15 @@ T.Control {
     }
 
     background: Widgets.AnimatedBackground {
-        color: selected ? theme.bg.highlight : theme.bg.primary
+        color: (selected || delegate.isCurrent) ? theme.bg.highlight : theme.bg.primary
+        radius: VLCStyle.dp(4, VLCStyle.scale)
 
         enabled: theme.initialized
 
         border.color: delegate.visualFocus ? theme.visualFocus : Qt.alpha(theme.visualFocus, 0.0)
 
         Widgets.CurrentIndicator {
+            visible: !delegate.compact
             anchors {
                 left: parent.left
                 leftMargin: VLCStyle.margin_xxsmall
@@ -167,7 +170,26 @@ T.Control {
         property alias artworkTextureProvider: artwork.effectiveTextureProviderItem
 
         Item {
+            Layout.preferredWidth: VLCStyle.dp(32, VLCStyle.scale)
+            Layout.preferredHeight: VLCStyle.dp(32, VLCStyle.scale)
+            visible: delegate.compact
+            Accessible.ignored: true
+            Image {
+                anchors.centerIn: parent
+                width: VLCStyle.dp(24, VLCStyle.scale)
+                height: width
+                mirror: true
+                // Source: the original Queue drag handle, Figma463:418.
+                source: SVGColorImage.colorize("qrc:///redesign/icons/queue-drag.svg")
+                    .any({"#8F8F8F": delegate.isCurrent ? theme.accent : theme.fg.secondary}).uri()
+                fillMode: Image.PreserveAspectFit
+                Accessible.ignored: true
+            }
+        }
+
+        Item {
             id: artworkItem
+            visible: !delegate.compact
 
             Layout.preferredHeight: VLCStyle.icon_playlistArt
             Layout.preferredWidth: VLCStyle.icon_playlistArt
@@ -189,6 +211,8 @@ T.Control {
                 id: artwork
 
                 anchors.fill: parent
+                implicitWidth: VLCStyle.icon_playlistArt
+                implicitHeight: VLCStyle.icon_playlistArt
                 fillMode: Image.PreserveAspectFit
                 source: defaultSource
                 visible: !statusIcon.visible
@@ -274,7 +298,7 @@ T.Control {
 
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.leftMargin: VLCStyle.margin_large
+            Layout.leftMargin: delegate.compact ? VLCStyle.dp(10, VLCStyle.scale) : VLCStyle.margin_normal
             spacing: VLCStyle.margin_xxxsmall
 
             Widgets.ListLabel {
@@ -282,8 +306,9 @@ T.Control {
 
                 Layout.fillWidth: true
 
-                font.weight: delegate.isCurrent ? Font.Bold : Font.DemiBold
-                text: delegate.title || qsTr("Unknown Title")
+                font.weight: delegate.isCurrent ? Font.Bold : delegate.compact ? Font.Normal : Font.DemiBold
+                font.pixelSize: delegate.compact ? VLCStyle.dp(14, VLCStyle.scale) : VLCStyle.fontSize_normal
+                text: delegate.title || delegate.url.toString()
                 color: theme.fg.primary
             }
 
@@ -293,17 +318,19 @@ T.Control {
                 Layout.fillWidth: true
 
                 text: delegate.artist || (delegate.title.length === 0 ? delegate.url : "")
-                color: theme.fg.primary
+                visible: !delegate.compact
+                color: theme.fg.secondary
             }
         }
 
         Widgets.ListLabel {
             id: textDuration
 
-            text: delegate.duration.formatHMS()
+            text: delegate.duration.valid() && delegate.duration.toSeconds() >= 0 && (!delegate.duration.isSubSecond() || delegate.duration.scale(1000).toSeconds() >= 0) ? delegate.duration.formatHMS() : ""
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             color: theme.fg.primary
+            font.pixelSize: delegate.compact ? VLCStyle.dp(14, VLCStyle.scale) : VLCStyle.fontSize_normal
             opacity: 0.5
         }
     }
@@ -396,7 +423,7 @@ T.Control {
 
             onSingleTapped: (eventPoint, button) => {
                 // initial action is handled in `DelegateTouchTapHandler`
-                MainPlaylistController.goTo(delegate.index, true)
+                MainPlaylistController.goTo(delegate.mappedIndex(), true)
             }
 
             onDoubleTapped: (eventPoint, button) => {

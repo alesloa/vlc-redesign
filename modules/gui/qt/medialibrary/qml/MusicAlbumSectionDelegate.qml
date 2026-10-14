@@ -191,7 +191,8 @@ T.Pane {
             const count = _albumData.nb_tracks ?? 0
             parts.push(qsTr("%1 track", "%1 tracks", count).arg(count))
 
-            const duration = _albumData.duration?.formatHMS()
+            const time = _albumData.duration
+            const duration = time?.valid() && time.toSeconds() >= 0 && (!time.isSubSecond() || time.scale(1000).toSeconds() >= 0) ? time.formatHMS() : ""
             if (duration)
                 parts.push(duration)
 

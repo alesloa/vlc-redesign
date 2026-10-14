@@ -269,11 +269,13 @@ FocusScope {
 
                         width: parent.width
 
-                        text: qsTr("%1 - %2 - %3 - %4")
-                            .arg(root.model?.main_artist || qsTr("Unknown artist"))
-                            .arg(root.model?.release_year || "")
-                            .arg(_getStringTrack())
-                            .arg(root.model?.duration?.formatHMS() ?? 0)
+                        text: {
+                            const parts = [root.model?.main_artist || qsTr("Unknown artist"), root.model?.release_year || "", _getStringTrack()]
+                            const duration = root.model?.duration
+                            if (duration?.valid() && duration.toSeconds() >= 0 && (!duration.isSubSecond() || duration.scale(1000).toSeconds() >= 0))
+                                parts.push(duration.formatHMS())
+                            return parts.filter(value => value !== "").join(" - ")
+                        }
                     }
                 }
             }

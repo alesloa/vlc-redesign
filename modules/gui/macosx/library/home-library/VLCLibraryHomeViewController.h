@@ -46,6 +46,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (instancetype)initWithLibraryWindow:(VLCLibraryWindow *)libraryWindow;
 
 - (void)presentHomeView;
+- (void)updateNavigationControls;
 
 @end
 

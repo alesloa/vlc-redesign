@@ -39,6 +39,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)addItems:(NSArray<VLCPlayQueueItem *> *)array;
 - (void)addItems:(NSArray<VLCPlayQueueItem *> *)array atIndex:(size_t)index count:(size_t)count;
 - (void)moveItemAtIndex:(size_t)index toTarget:(size_t)target;
+- (void)moveItemsAtIndex:(size_t)index count:(size_t)count toTarget:(size_t)target;
 - (void)removeItemsInRange:(NSRange)range;
 - (void)updateItemAtIndex:(size_t)index;
 - (void)replaceItemAtIndex:(size_t)index withItem:(VLCPlayQueueItem *)newItem;

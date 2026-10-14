@@ -27,6 +27,7 @@
 
 #import "main/VLCMain.h"
 #import "playqueue/VLCPlayQueueController.h"
+#import "playqueue/VLCPlayQueueDataSource.h"
 #import "playqueue/VLCPlayQueueMenuController.h"
 
 @interface VLCPlayQueueTableView ()
@@ -67,6 +68,11 @@
 
     size_t indexOfSelectedItem = self.selectedRow;
     NSIndexSet *selectedIndexes = [self selectedRowIndexes];
+    if([self.dataSource isKindOfClass:VLCPlayQueueDataSource.class]) {
+        VLCPlayQueueDataSource *source=(VLCPlayQueueDataSource *)self.dataSource;
+        indexOfSelectedItem=[source modelIndexForVisibleRow:self.selectedRow];
+        selectedIndexes=[source modelIndexesForViewIndexes:selectedIndexes];
+    }
 
     switch(key) {
         case NSDeleteCharacter:
@@ -81,7 +87,7 @@
 
         case NSEnterCharacter:
         case NSCarriageReturnCharacter:
-            [VLCMain.sharedInstance.playQueueController playItemAtIndex:indexOfSelectedItem];
+            if(indexOfSelectedItem!=NSNotFound)[VLCMain.sharedInstance.playQueueController playItemAtIndex:indexOfSelectedItem];
             break;
 
         default:

@@ -31,6 +31,7 @@ class Media;
 }
 
 struct vlc_medialibrary_t;
+class QSettings;
 
 class MediaLib : public QObject
 {
@@ -45,6 +46,9 @@ public:
 public:
     MediaLib(qt_intf_t* _intf, vlc::playlist::PlaylistController* playlistController, QObject* _parent = nullptr );
     ~MediaLib();
+
+    // Presentation settings belong to the GUI's existing settings store.
+    QSettings* interfaceSettings() const;
 
     Q_INVOKABLE static MLItemId deserializeMlItemIdFromString(const QString& serialized_id);
 
@@ -62,6 +66,12 @@ public:
     Q_INVOKABLE void reload();
 
     Q_INVOKABLE void mlInputItem(const QVector<MLItemId>& itemIdVector, QJSValue callback);
+
+    // Home presentation derives listened artists from actual track play counts.
+    Q_INVOKABLE void frequentArtists(int limit, QJSValue callback);
+
+    // User-selected subtitle mappings use the media library's existing file association.
+    Q_INVOKABLE void addExternalSubtitle(const MLItemId& itemId, const QUrl& subtitle);
 
     inline bool idle() const { return m_idle; }
     inline int discoveryPending() const { return m_discoveryPending; }
@@ -166,6 +176,7 @@ public:
     void cancelMLTask(const QObject* object, quint64 taskId);
 
 signals:
+    void externalSubtitleAdded(const MLItemId& itemId, const QUrl& subtitle, bool success);
     void discoveryStarted();
     void discoveryCompleted();
     void parsingProgressChanged( quint32 percent );

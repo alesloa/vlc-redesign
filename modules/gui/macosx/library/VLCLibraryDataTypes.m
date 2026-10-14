@@ -27,8 +27,10 @@
 #import "library/VLCInputItem.h"
 #import "library/VLCLibraryController.h"
 #import "library/VLCLibraryNameCache.h"
+#import "library/VLCLibraryModel.h"
 
 #import <vlc_media_library.h>
+#import <vlc_input_item.h>
 #import <vlc_url.h>
 
 NSString * const VLCMediaLibraryMediaItemPasteboardType = @"VLCMediaLibraryMediaItemPasteboardType";
@@ -45,6 +47,19 @@ const CGFloat VLCMediaLibrary540pHeight = 540.;
 
 NSString *VLCMediaLibraryMediaItemLibraryID = @"VLCMediaLibraryMediaItemLibraryID";
 
+NSArray<VLCMediaLibraryMediaItem *> *VLCMediaLibraryRecentItems(VLCLibraryModel *model)
+{
+    // Figma's Recent navigation uses only VLC's existing history APIs. Actual
+    // IDs deduplicate entries; actual last-played timestamps order both types.
+    NSMutableDictionary<NSNumber *, VLCMediaLibraryMediaItem *> *items=[NSMutableDictionary dictionary];
+    for(NSArray *history in @[model.listOfRecentMedia ?: @[],model.listOfRecentAudioMedia ?: @[]])
+        for(VLCMediaLibraryMediaItem *item in history) items[@(item.libraryID)]=item;
+    return [items.allValues sortedArrayUsingComparator:^NSComparisonResult(VLCMediaLibraryMediaItem *a,VLCMediaLibraryMediaItem *b) {
+        if(a.lastPlayedDate != b.lastPlayedDate) return a.lastPlayedDate > b.lastPlayedDate ? NSOrderedAscending : NSOrderedDescending;
+        return a.libraryID < b.libraryID ? NSOrderedAscending : a.libraryID > b.libraryID ? NSOrderedDescending : NSOrderedSame;
+    }];
+}
+
 typedef vlc_ml_media_list_t* (*library_mediaitem_list_fetch_f)(vlc_medialibrary_t*, const vlc_ml_query_params_t*, int64_t);
 typedef vlc_ml_album_list_t* (*library_album_list_fetch_f)(vlc_medialibrary_t*, const vlc_ml_query_params_t*, int64_t);
 typedef vlc_ml_artist_list_t* (*library_artist_list_fetch_f)(vlc_medialibrary_t*, const vlc_ml_query_params_t*, int64_t);
@@ -57,6 +72,33 @@ vlc_medialibrary_t * _Nullable getMediaLibrary(void)
         return nil;
     }
     return vlc_ml_instance_get(p_intf);
+}
+
+input_item_t *VLCMediaLibraryInputItemWithStoredTracks(vlc_medialibrary_t *library, int64_t mediaID)
+{
+    input_item_t *item = vlc_ml_get_input_item(library, mediaID);
+    if (item == NULL) return NULL;
+    // Persisted subtitle/soundtrack files are real ML metadata. Attach them at
+    // this GUI boundary so the normal player can load them on the next opening.
+    vlc_ml_media_t *media = vlc_ml_get_media(library, mediaID);
+    if (media != NULL && media->p_files != NULL) {
+        for (size_t index = 0; index < media->p_files->i_nb_items; ++index) {
+            const vlc_ml_file_t *file = &media->p_files->p_items[index];
+            if (file->psz_mrl == NULL || !file->b_present ||
+                (file->i_type != VLC_ML_FILE_TYPE_SUBTITLE && file->i_type != VLC_ML_FILE_TYPE_SOUNDTRACK)) continue;
+            bool attached = false;
+            vlc_mutex_lock(&item->lock);
+            for (int slaveIndex = 0; slaveIndex < item->i_slaves; ++slaveIndex)
+                if (strcmp(item->pp_slaves[slaveIndex]->psz_uri, file->psz_mrl) == 0) attached = true;
+            vlc_mutex_unlock(&item->lock);
+            if (attached) continue;
+            enum slave_type type = file->i_type == VLC_ML_FILE_TYPE_SUBTITLE ? SLAVE_TYPE_SPU : SLAVE_TYPE_GENERIC;
+            input_item_slave_t *slave = input_item_slave_New(file->psz_mrl, type, SLAVE_PRIORITY_USER);
+            if (slave != NULL && input_item_AddSlave(item, slave) != VLC_SUCCESS) input_item_slave_Delete(slave);
+        }
+    }
+    if (media != NULL) vlc_ml_media_release(media);
+    return item;
 }
 
 static NSArray<VLCMediaLibraryMediaItem *> *fetchMediaItemsForLibraryItem(library_mediaitem_list_fetch_f fetchFunction, int64_t itemId)
@@ -1007,7 +1049,8 @@ static NSString *genreArrayDisplayString(NSArray<VLCMediaLibraryGenre *> * const
         return nil;
     }
 
-    return [[VLCMediaLibraryPlaylist alloc] initWithPlaylist:p_playlist];
+    VLCMediaLibraryPlaylist *playlist = [[VLCMediaLibraryPlaylist alloc] initWithPlaylist:p_playlist];
+    vlc_ml_playlist_release(p_playlist); return playlist;
 }
 
 - (instancetype)initWithPlaylist:(const struct vlc_ml_playlist_t * const)p_playlist
@@ -1017,6 +1060,12 @@ static NSString *genreArrayDisplayString(NSArray<VLCMediaLibraryGenre *> * const
         self.libraryID = p_playlist->i_id;
         self.smallArtworkGenerated = p_playlist->psz_artwork_mrl != NULL;
         self.smallArtworkMRL = toNSStr(p_playlist->psz_artwork_mrl);
+        NSString *coverKey = [NSString stringWithFormat:@"VLCRedesignPlaylistCover.%lld", p_playlist->i_id];
+        NSString *ownerCover = [NSUserDefaults.standardUserDefaults stringForKey:coverKey];
+        NSURL *ownerCoverURL = ownerCover.length ? [NSURL URLWithString:ownerCover] : nil;
+        if (ownerCoverURL.isFileURL) {
+            self.smallArtworkMRL = ownerCover; self.smallArtworkGenerated = YES;
+        }
         self.displayString = toNSStr(p_playlist->psz_name);
         const unsigned int numberOfMedia = p_playlist->i_nb_media;
         self.primaryDetailString = numberOfMedia == 0 ? _NS("No item") : _NPS("%u item", "%u items", numberOfMedia);
@@ -1612,7 +1661,7 @@ static NSString *genreArrayDisplayString(NSArray<VLCMediaLibraryGenre *> * const
 
 - (VLCInputItem *)inputItem
 {
-    input_item_t *p_inputItem = vlc_ml_get_input_item(_p_mediaLibrary, self.libraryID);
+    input_item_t *p_inputItem = VLCMediaLibraryInputItemWithStoredTracks(_p_mediaLibrary, self.libraryID);
     VLCInputItem *inputItem = nil;
     if (p_inputItem) {
         inputItem = [[VLCInputItem alloc] initWithInputItem:p_inputItem];

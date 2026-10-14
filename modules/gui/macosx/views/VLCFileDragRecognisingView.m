@@ -32,6 +32,15 @@
 
 + (BOOL)handlePasteboardFromDragSessionAsPlayQueueItems:(NSPasteboard *)pasteboard
 {
+    return [self handlePasteboardFromDragSessionAsPlayQueueItems:pasteboard
+                                                    atPosition:NSUIntegerMax
+                                                 startPlayback:var_InheritBool(getIntf(), "macosx-autoplay")];
+}
+
++ (BOOL)handlePasteboardFromDragSessionAsPlayQueueItems:(NSPasteboard *)pasteboard
+                                           atPosition:(size_t)position
+                                        startPlayback:(BOOL)startPlayback
+{
     NSMutableArray<VLCMediaLibraryMediaItem *> * const allMediaItems = [NSMutableArray array];
     for (NSPasteboardItem * const pboardItem in pasteboard.pasteboardItems) {
         NSData *itemData = [pboardItem dataForType:VLCMediaLibraryMediaItemPasteboardType];
@@ -51,8 +60,9 @@
     if (allMediaItems.count > 0) {
         for (VLCMediaLibraryMediaItem * const mediaItem in allMediaItems) {
             [VLCMain.sharedInstance.playQueueController addInputItem:mediaItem.inputItem.vlcInputItem
-                                                          atPosition:-1
+                                                          atPosition:position
                                                        startPlayback:NO];
+            if (position != NSUIntegerMax) position++;
         }
         return YES;
     }
@@ -89,7 +99,7 @@
     }
 
     if (URLMetadataArray.count > 0) {
-        [VLCMain.sharedInstance.playQueueController addPlayQueueItems:URLMetadataArray];
+        [VLCMain.sharedInstance.playQueueController addPlayQueueItems:URLMetadataArray atPosition:position startPlayback:startPlayback];
         return YES;
     }
 
@@ -113,7 +123,7 @@
         }
     }
 
-    [VLCMain.sharedInstance.playQueueController addPlayQueueItems:metadataArray];
+    [VLCMain.sharedInstance.playQueueController addPlayQueueItems:metadataArray atPosition:position startPlayback:startPlayback];
     return YES;
 }
 

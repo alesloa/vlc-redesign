@@ -24,6 +24,7 @@
 #import "VLCLibraryCollectionViewItem.h"
 
 #import "extensions/NSColor+VLCAdditions.h"
+#import "extensions/NSFont+VLCAdditions.h"
 #import "extensions/NSString+Helpers.h"
 
 #import "library/VLCLibraryCollectionViewDataSource.h"
@@ -79,11 +80,20 @@ NSString *VLCLibraryCollectionViewItemIdentifier = @"VLCLibraryCollectionViewIte
                                                                         toItem:self.mediaImageView
                                                                         attribute:NSLayoutAttributeWidth
                                                                        multiplier:VLCUIUnits.videoItemCollectionViewImageViewAspectRatioMultiplier
-                                                                        constant:1];
+                                                                        constant:0];
     _videoImageViewAspectRatioConstraint.priority = NSLayoutPriorityRequired;
     _videoImageViewAspectRatioConstraint.active = NO;
 
     [super awakeFromNib];
+
+    // Figma Library970:2703: rounded artwork and neutral Inter titles; actual
+    // thumbnail, metadata, selection and original context actions are retained.
+    self.mediaImageView.wantsLayer = YES;
+    self.mediaImageView.layer.cornerRadius = 12;
+    self.mediaImageView.layer.masksToBounds = YES;
+    self.mediaTitleTextField.font = [NSFont vlc_redesignFontOfSize:16 weight:NSFontWeightRegular];
+    self.mediaTitleTextField.textColor = NSColor.VLCControlForegroundColor;
+    self.secondaryInfoTextField.font = [NSFont vlc_redesignFontOfSize:12 weight:NSFontWeightRegular];
 
     self.secondaryInfoTextField.textColor = NSColor.VLClibrarySubtitleColor;
     self.unplayedIndicatorTextField.stringValue = _NS("NEW");
@@ -138,6 +148,12 @@ NSString *VLCLibraryCollectionViewItemIdentifier = @"VLCLibraryCollectionViewIte
     self.mediaTitleTextField.stringValue = actualItem.displayString ?: @"";
     self.secondaryInfoTextField.stringValue = actualItem.primaryDetailString ?: @"";
     self.secondaryInfoTextField.hidden = NO;
+    BOOL video = [actualItem isKindOfClass:VLCMediaLibraryMediaItem.class] &&
+        ((VLCMediaLibraryMediaItem *)actualItem).mediaType != VLC_ML_MEDIA_TYPE_AUDIO;
+    for (NSLayoutConstraint *constraint in self.view.constraints) {
+        if (constraint.firstItem == self.mediaTitleTextField && constraint.firstAttribute == NSLayoutAttributeTop)
+            constraint.constant = video ? 20 : 4;
+    }
 
     __weak typeof(self) weakSelf = self;
     [VLCLibraryImageCache thumbnailForLibraryItem:actualItem

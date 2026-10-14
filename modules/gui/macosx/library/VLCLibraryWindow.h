@@ -37,7 +37,6 @@ NS_ASSUME_NONNULL_BEGIN
 @class VLCLibrarySortingMenuController;
 @class VLCMediaLibraryGroup;
 @class VLCPlayQueueController;
-@class VLCCustomEmptyLibraryBrowseButton;
 @class VLCLibraryWindowSplitViewController;
 @class VLCLibraryWindowToolbarDelegate;
 @class VLCLoadingOverlayView;
@@ -113,7 +112,7 @@ extern NSString * const VLCLibraryWindowEmbeddedVideoPlaybackActiveKey;
 @property (nonatomic, readwrite, strong) IBOutlet NSView *emptyLibraryView;
 @property (nonatomic, readwrite, weak) IBOutlet NSImageView *placeholderImageView;
 @property (nonatomic, readwrite, weak) IBOutlet NSTextField *placeholderLabel;
-@property (nonatomic, readwrite, weak) IBOutlet VLCCustomEmptyLibraryBrowseButton *placeholderGoToBrowseButton;
+@property (nonatomic, readwrite, weak) IBOutlet NSButton *placeholderGoToBrowseButton;
 
 @property (readonly) VLCLoadingOverlayView *loadingOverlayView;
 @property (readonly) NSArray<NSLayoutConstraint *> *placeholderImageViewConstraints;
@@ -133,6 +132,7 @@ extern NSString * const VLCLibraryWindowEmbeddedVideoPlaybackActiveKey;
 - (void)hideControlsBar;
 - (void)showControlsBar;
 - (void)updateGridVsListViewModeSegmentedControl;
+- (void)updateLibraryNavigationControls;
 - (void)updateFilterString;
 - (void)clearFilterString;
 - (void)updateToolbarDisplayFlags;

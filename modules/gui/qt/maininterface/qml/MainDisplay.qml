@@ -26,6 +26,7 @@ import VLC.Player
 
 import VLC.Util
 import VLC.Dialogs
+import VLC.MediaLibrary as ML
 
 FocusScope {
     id: g_mainDisplay
@@ -125,6 +126,9 @@ FocusScope {
         }, {
             name: "mlsettings",
             url: "qrc:///qt/qml/VLC/MediaLibrary/MLFoldersSettings.qml"
+        }, {
+            name: "recent",
+            url: "qrc:///qt/qml/VLC/MainInterface/RecentDisplay.qml"
         }
     ]
 
@@ -198,6 +202,12 @@ FocusScope {
         target: History
         function onNavigate(focusReason) {
             loadCurrentHistoryView(focusReason)
+            // Only actual library collection navigation contributes to the
+            // GUI's frequency history. The shared adapter validates its ID.
+            if (MainCtx.mediaLibraryAvailable
+                    && (History.viewPath[0] === "video" || History.viewPath[0] === "music")
+                    && History.viewProp?.parentId)
+                ML.LibraryPins.visit(History.viewProp.parentId)
         }
     }
 
@@ -259,9 +269,9 @@ FocusScope {
             right: parent.right
         }
 
-        leftPadding: VLCStyle.applicationHorizontalMargin
-        rightPadding: VLCStyle.applicationHorizontalMargin
-        topPadding: menuTopbar.visible ? 0 : VLCStyle.applicationVerticalMargin
+        leftPadding: MainCtx.dp(6)
+        rightPadding: MainCtx.dp(6)
+        topPadding: 0
 
         plListView: {
             if (playlistLoader.active)
@@ -563,7 +573,8 @@ FocusScope {
 
             width: VLCStyle.isScreenReallySmall ? 0.0 : collapsedWidth
 
-            property real collapsedWidth: VLCStyle.icon_normal + VLCStyle.margin_small + VLCStyle.margin_xsmall + VLCStyle.applicationHorizontalMargin
+            // Figma's library rail is 50 px with 24 px category icons.
+            property real collapsedWidth: MainCtx.dp(50)
 
             delegateShowText: (state === "expanded")
 
@@ -573,14 +584,15 @@ FocusScope {
 
             property int maximumWidth: Math.max(minimumWidth, (g_mainDisplay.width + sidebarResizeHandle.width) / 3)
 
-            topPadding: 0
-            leftPadding: 0
-            rightPadding: sidebarResizeHandle.visible ? sidebarResizeHandle.visualBorder.width : 0.0
-            bottomPadding: VLCStyle.applicationVerticalMargin + VLCStyle.margin_small
+            topPadding: MainCtx.dp(delegateShowText ? 20 : 8)
+            leftPadding: MainCtx.dp(delegateShowText ? 8 : 0)
+            rightPadding: MainCtx.dp(delegateShowText ? 8 : 0)
+                + (sidebarResizeHandle.visible ? sidebarResizeHandle.visualBorder.width : 0.0)
+            bottomPadding: MainCtx.dp(8)
 
-            safeAreaLeftMargin: VLCStyle.applicationHorizontalMargin
+            safeAreaLeftMargin: 0
 
-            useAcrylic: (VLCStyle.isScreenSmall ? (sidebar.state === "") : true) // See `694d51a7` for the reasoning.
+            useAcrylic: false
 
             NavigationBarContextMenu {
                 id: navigationBarContextMenu
@@ -621,6 +633,8 @@ FocusScope {
 
                 History.push(modelUri)
             }
+
+            onPinRequested: (uri, properties) => History.push(uri, properties)
 
             implicitWidth: Math.round(Helpers.clamp(MainCtx.navigationPanel.width, minimumWidth, maximumWidth))
 

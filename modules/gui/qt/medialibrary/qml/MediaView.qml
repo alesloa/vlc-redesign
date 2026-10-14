@@ -164,7 +164,8 @@ MainViewLoader {
                 fallbackImage: model.isVideo ? VLCStyle.noArtVideoCover : VLCStyle.noArtAlbumCover
 
                 title: model.title || qsTr("Unknown Title")
-                subtitle: model.duration?.formatHMS() ?? "--:--"
+                subtitle: model.duration?.valid() && model.duration.toSeconds() >= 0 && (!model.duration.isSubSecond() || model.duration.scale(1000).toSeconds() >= 0)
+                          ? model.duration.formatHMS() : ""
 
                 opacity: gridView.expandIndex !== -1 && gridView.expandIndex !== index ? 0.7 : 1
 

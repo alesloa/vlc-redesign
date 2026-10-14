@@ -56,13 +56,17 @@ NavigableRow {
         }
     }
 
-    SearchBox {
+    InlineSearchField {
         id: searchBox
 
         //TODO: initialise visible value with MainCtx
         visible: root.search.available
+        enabled: visible
         height: VLCStyle.bannerButton_height
-        buttonWidth: VLCStyle.bannerButton_width
+        // Leave room for the title/breadcrumb and library actions in narrow headers.
+        // The existing search width and banner sizes supply both bounds.
+        implicitWidth: Math.max(VLCStyle.bannerButton_width * 3,
+                                Math.min(VLCStyle.widthSearchInput, root.parent.width / 3))
 
         Binding {
             target: root.search

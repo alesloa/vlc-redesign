@@ -32,6 +32,7 @@
 {
     VLCLibraryController *_libraryController;
     NSMenu *_librarySortingMenu;
+    NSNumber *_watchedSortSelected;
 }
 @end
 
@@ -71,6 +72,14 @@
         [_librarySortingMenu addItem:menuItem];
     }
 
+    // The transcript requests watched/unwatched first. VLC's existing ML
+    // playcount sort provides that order without a made-up completion threshold.
+    for (NSNumber *descending in @[@NO, @YES]) {
+        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:descending.boolValue ? _NS("Watched First") : _NS("Unwatched First") action:@selector(selectWatchedSort:) keyEquivalent:@""];
+        item.target = self; item.representedObject = descending;
+        item.tag = descending.boolValue ? 202 : 201; [_librarySortingMenu addItem:item];
+    }
+
     [_librarySortingMenu addItem:[NSMenuItem separatorItem]];
 
     titles = @[_NS("Ascending"),
@@ -98,6 +107,9 @@
     }
 
     NSMenuItem *menuItem = [_librarySortingMenu itemWithTag:_libraryController.lastSortingCriteria];
+    if (_watchedSortSelected && _libraryController.lastSortingCriteria == VLC_ML_SORTING_PLAYCOUNT) {
+        menuItem = [_librarySortingMenu itemWithTag:_libraryController.descendingLibrarySorting ? 202 : 201];
+    }
     menuItem.state = NSOnState;
 
     menuItem = [_librarySortingMenu itemWithTag:_libraryController.descendingLibrarySorting + 100];
@@ -106,6 +118,7 @@
 
 - (void)selectSortKey:(id)sender
 {
+    _watchedSortSelected = nil;
     enum vlc_ml_sorting_criteria_t sortCriteria = (enum vlc_ml_sorting_criteria_t)[sender tag];
     bool descending;
     if (_libraryController.unsorted) {
@@ -116,6 +129,12 @@
     }
 
     [_libraryController sortByCriteria:sortCriteria andDescending:descending];
+}
+
+- (void)selectWatchedSort:(NSMenuItem *)sender
+{
+    _watchedSortSelected = sender.representedObject;
+    [_libraryController sortByCriteria:VLC_ML_SORTING_PLAYCOUNT andDescending:_watchedSortSelected.boolValue];
 }
 
 - (void)selectSortOrder:(id)sender

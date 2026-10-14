@@ -85,6 +85,7 @@ vlc_ml_sorting_criteria_t MLAudioModel::nameToCriteria(QByteArray name) const
         {QByteArrayLiteral("main_artist"), VLC_ML_SORTING_ARTIST},
         {QByteArrayLiteral("duration"), VLC_ML_SORTING_DURATION},
         {QByteArrayLiteral("insertion"), VLC_ML_SORTING_INSERTIONDATE},
+        {QByteArrayLiteral("playcount"), VLC_ML_SORTING_PLAYCOUNT},
     }.value(name, VLC_ML_SORTING_DEFAULT);
 }
 

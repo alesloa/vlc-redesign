@@ -20,9 +20,26 @@ import QtQuick
 import VLC.MediaLibrary
 import VLC.Dialogs
 import VLC.Menus
+import VLC.MainInterface
+import VLC.Player
 
 Item {
-    ShortcutExt{ sequence:"Ctrl+B"; onActivated: DialogsProvider.bookmarksDialog() }
+    // This file is already loaded by URL only when VLC's native ML types are
+    // registered. Keep its original shortcut/focus policy and preload the
+    // actual bookmark model across player/library navigation.
+    MLBookmarkModel {
+        id: quickBookmarks
+        objectName: "quickBookmarkModel"
+        ml: MediaLib
+        player: Player
+    }
+    // Source: the supplied walkthrough's Ctrl+B quick-create instruction.
+    ShortcutExt {
+        objectName: "quickBookmarkShortcut"
+        sequence: "Ctrl+B"
+        enabled: MainCtx.useGlobalShortcuts && Player.isStarted && Player.time.valid()
+        onActivated: quickBookmarks.add()
+    }
 
     MLRecentMediaModel {
         id: recentModel

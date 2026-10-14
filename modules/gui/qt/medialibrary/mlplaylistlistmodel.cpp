@@ -28,6 +28,9 @@
 #include "util/vlctick.hpp"
 #include "dialogs/dialogs_provider.hpp"
 #include "playlist/playlist_controller.hpp"
+#include <QFileInfo>
+#include <QImageReader>
+#include <QSettings>
 
 // MediaLibrary includes
 #include "mlhelper.hpp"
@@ -46,6 +49,19 @@ const int MLPLAYLISTMODEL_COVER_HEIGHT = 162 * 3;
 
 const int PLAYLIST_COVERX = 2;
 const int PLAYLIST_COVERY = 2;
+
+QString customCoverKey(int64_t playlistId)
+{
+    return QStringLiteral("PlaylistCustomCovers/%1").arg(playlistId);
+}
+
+bool validCustomCover(const QUrl& cover)
+{
+    if (!cover.isLocalFile())
+        return false;
+    const QFileInfo file(cover.toLocalFile());
+    return file.isFile() && file.isReadable() && QImageReader(file.filePath()).canRead();
+}
 
 void appendMediaIntoPlaylist(vlc_medialibrary_t* ml, int64_t playlistId, const std::vector<MLItemId>& itemList)
 {
@@ -86,6 +102,11 @@ void appendMediaIntoPlaylist(vlc_medialibrary_t* ml, int64_t playlistId, const s
 
 /* Q_INVOKABLE */ void MLPlaylistListModel::create(const QString & name, const QVariantList& initialItems)
 {
+    createWithCover(name, initialItems, QUrl());
+}
+
+void MLPlaylistListModel::createWithCover(const QString& name, const QVariantList& initialItems, const QUrl& cover)
+{
     assert(m_mediaLib);
 
     struct Ctx {
@@ -105,14 +126,33 @@ void appendMediaIntoPlaylist(vlc_medialibrary_t* ml, int64_t playlistId, const s
             vlc_ml_playlist_release(playlist);
         }
     },
-    [this, initialItems](quint64, const Ctx& ctx) {
+    [this, initialItems, cover](quint64, const Ctx& ctx) {
         endTransaction(); // this is intentionally called here and not after `append()`
 
-        if (ctx.createdPlaylistId.id)
+        if (ctx.createdPlaylistId.id && !cover.isEmpty())
+            setCustomCover(MLItemId(ctx.createdPlaylistId.id, VLC_ML_PARENT_PLAYLIST), cover);
+
+        if (ctx.createdPlaylistId.id && !initialItems.isEmpty())
         {
             append(ctx.createdPlaylistId, initialItems);
         }
     });
+}
+
+bool MLPlaylistListModel::setCustomCover(const MLItemId& playlistId, const QUrl& cover)
+{
+    if (!m_mediaLib || !playlistId.isValid() || playlistId.type != VLC_ML_PARENT_PLAYLIST)
+        return false;
+    auto* settings = m_mediaLib->interfaceSettings();
+    if (!settings || (!cover.isEmpty() && !validCustomCover(cover)))
+        return false;
+    const QString key = customCoverKey(playlistId.id);
+    if (cover.isEmpty())
+        settings->remove(key);
+    else
+        settings->setValue(key, cover.toString(QUrl::FullyEncoded));
+    emit resetRequested();
+    return true;
 }
 
 /* Q_INVOKABLE */ void MLPlaylistListModel::append(const MLItemId     & playlistId,
@@ -202,7 +242,10 @@ void appendMediaIntoPlaylist(vlc_medialibrary_t* ml, int64_t playlistId, const s
             vlc_ml_playlist_delete(ml, itemId.id);
     },
     //UI thread
-    [this](){
+    [this, itemList](){
+        if (auto* settings = m_mediaLib->interfaceSettings())
+            for (const auto& id : itemList)
+                settings->remove(customCoverKey(id.id));
         endTransaction();
     });
 
@@ -368,6 +411,13 @@ bool MLPlaylistListModel::setTransactionPending(const bool value)
 
 QString MLPlaylistListModel::getCover(const MLPlaylist * playlist) const
 {
+    if (m_mediaLib)
+        if (const auto* settings = m_mediaLib->interfaceSettings())
+        {
+            const QUrl cover(settings->value(customCoverKey(playlist->getId().id)).toString());
+            if (validCustomCover(cover))
+                return cover.toString(QUrl::FullyEncoded);
+        }
     return MLCustomCover::url(playlist->getId()
                             , m_coverSize
                             , m_coverDefault

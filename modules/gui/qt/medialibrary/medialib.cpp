@@ -24,6 +24,58 @@
 #include <utility>
 
 #include <QQmlEngine>
+#include <QFileInfo>
+#include <QHash>
+#include <QSet>
+#include <algorithm>
+
+// The ML exposes stored subtitle/soundtrack files separately from the input
+// item. Attach them at this GUI conversion boundary before normal playlist use.
+// Core selection, timing and external-track loading remain unchanged.
+static SharedInputItem inputItemWithStoredSlaves(vlc_medialibrary_t* ml, int64_t id,
+                                                const vlc_ml_media_t* metadata = nullptr)
+{
+    SharedInputItem item(vlc_ml_get_input_item(ml, id), false);
+    if (!item)
+        return {};
+
+    ml_unique_ptr<vlc_ml_media_t> ownedMetadata;
+    if (!metadata)
+    {
+        ownedMetadata.reset(vlc_ml_get_media(ml, id));
+        metadata = ownedMetadata.get();
+    }
+    if (!metadata || !metadata->p_files)
+        return item;
+
+    for (const auto& file : ml_range_iterate<vlc_ml_file_t>(metadata->p_files))
+    {
+        if (!file.psz_mrl || !file.b_present ||
+            (file.i_type != VLC_ML_FILE_TYPE_SUBTITLE && file.i_type != VLC_ML_FILE_TYPE_SOUNDTRACK))
+            continue;
+
+        // Future core-provided slaves must not be added twice.
+        bool alreadyAttached = false;
+        vlc_mutex_lock(&item->lock);
+        for (int i = 0; i < item->i_slaves; ++i)
+            if (!strcmp(item->pp_slaves[i]->psz_uri, file.psz_mrl))
+                alreadyAttached = true;
+        vlc_mutex_unlock(&item->lock);
+        if (alreadyAttached)
+            continue;
+
+        const auto type = file.i_type == VLC_ML_FILE_TYPE_SUBTITLE ? SLAVE_TYPE_SPU : SLAVE_TYPE_GENERIC;
+        auto* slave = input_item_slave_New(file.psz_mrl, type, SLAVE_PRIORITY_USER);
+        if (slave && input_item_AddSlave(item.get(), slave) != VLC_SUCCESS)
+            input_item_slave_Delete(slave);
+    }
+    return item;
+}
+
+QSettings* MediaLib::interfaceSettings() const
+{
+    return m_intf->mainSettings;
+}
 
 MediaLib::MediaLib(qt_intf_t *_intf, vlc::playlist::PlaylistController* playlistController, QObject *_parent)
     : QObject( _parent )
@@ -52,7 +104,7 @@ static void convertMLItemToPlaylistMedias(vlc_medialibrary_t* ml, const MLItemId
 
     if (itemId.type == VLC_ML_PARENT_UNKNOWN)
     {
-        SharedInputItem item( vlc_ml_get_input_item( ml, itemId.id ), false );
+        SharedInputItem item = inputItemWithStoredSlaves(ml, itemId.id);
         if (item)
             medias.push_back(vlc::playlist::Media(item.get(), options));
     }
@@ -64,10 +116,12 @@ static void convertMLItemToPlaylistMedias(vlc_medialibrary_t* ml, const MLItemId
             return;
 
         auto mediaRange = ml_range_iterate<vlc_ml_media_t>( media_list );
-        std::transform(mediaRange.begin(), mediaRange.end(), std::back_inserter(medias), [&](vlc_ml_media_t& m) {
-            SharedInputItem item(vlc_ml_get_input_item( ml, m.i_id ), false);
-            return vlc::playlist::Media(item.get(), options);
-        });
+        for (const auto& media : mediaRange)
+        {
+            SharedInputItem item = inputItemWithStoredSlaves(ml, media.i_id, &media);
+            if (item)
+                medias.push_back(vlc::playlist::Media(item.get(), options));
+        }
     }
 }
 
@@ -247,6 +301,67 @@ void MediaLib::reload()
     });
 }
 
+void MediaLib::frequentArtists(int limit, QJSValue callback)
+{
+    if (!callback.isCallable())
+        return;
+    struct Ctx { QVariantList rows; };
+    runOnMLThread<Ctx>(this, [limit](vlc_medialibrary_t* ml, Ctx& ctx) {
+        if (limit <= 0)
+            return;
+        auto query = vlc_ml_query_params_create();
+        query.i_sort = VLC_ML_SORTING_PLAYCOUNT;
+        query.b_desc = true;
+        query.i_nbResults = 128; // Internal read batch, never a displayed value.
+        QHash<int64_t, uint64_t> counts;
+        QSet<int64_t> seen;
+        bool complete = false;
+        while (!complete)
+        {
+            ml_unique_ptr<vlc_ml_media_list_t> media(vlc_ml_list_audio_media(ml, &query));
+            if (!media || media->i_nb_items == 0)
+                break;
+            for (const auto& track : ml_range_iterate<vlc_ml_media_t>(media))
+            {
+                if (track.i_playcount == 0) { complete = true; break; }
+                if (seen.contains(track.i_id))
+                    continue;
+                seen.insert(track.i_id);
+                if (track.i_subtype == VLC_ML_MEDIA_SUBTYPE_ALBUMTRACK && track.album_track.i_artist_id > 0)
+                    counts[track.album_track.i_artist_id] += track.i_playcount;
+            }
+            if (media->i_nb_items < query.i_nbResults)
+                break;
+            query.i_offset += query.i_nbResults;
+        }
+        std::vector<std::pair<int64_t, uint64_t>> ranked;
+        ranked.reserve(counts.size());
+        for (auto count = counts.cbegin(); count != counts.cend(); ++count)
+            ranked.emplace_back(count.key(), count.value());
+        std::sort(ranked.begin(), ranked.end(), [](const auto& first, const auto& second) {
+            return first.second != second.second ? first.second > second.second : first.first < second.first;
+        });
+        for (const auto& count : ranked)
+        {
+            ml_unique_ptr<vlc_ml_artist_t> artist(vlc_ml_get_artist(ml, count.first));
+            if (!artist || !artist->psz_name || !*artist->psz_name)
+                continue;
+            const MLItemId id(artist->i_id, VLC_ML_PARENT_ARTIST);
+            ctx.rows.append(QVariantMap{{QStringLiteral("id"), QVariant::fromValue(id)},
+                {QStringLiteral("mediaId"), QVariant::fromValue(id)},
+                {QStringLiteral("serialized"), id.toString()},
+                {QStringLiteral("title"), qfu(artist->psz_name)},
+                {QStringLiteral("cover"), qfu(artist->thumbnails[VLC_ML_THUMBNAIL_SMALL].psz_mrl)},
+                {QStringLiteral("kind"), QStringLiteral("artist")}});
+            if (ctx.rows.size() >= limit)
+                break;
+        }
+    }, [this, callback](quint64, Ctx& ctx) mutable {
+        if (auto engine = qjsEngine(this))
+            callback.call({engine->toScriptValue(ctx.rows)});
+    });
+}
+
 void MediaLib::mlInputItem(const QVector<MLItemId>& itemIdVector, QJSValue callback)
 {
     if (!callback.isCallable()) // invalid argument
@@ -298,7 +413,8 @@ void MediaLib::mlInputItem(const QVector<MLItemId>& itemIdVector, QJSValue callb
             // NOTE: When we have a parent it's a collection of media(s).
             if (mlId.type == VLC_ML_PARENT_UNKNOWN)
             {
-                ctx.items.emplace_back(vlc_ml_get_input_item(ml, mlId.id), false);
+                if (auto item = inputItemWithStoredSlaves(ml, mlId.id))
+                    ctx.items.push_back(std::move(item));
             }
             else
             {
@@ -312,7 +428,8 @@ void MediaLib::mlInputItem(const QVector<MLItemId>& itemIdVector, QJSValue callb
                     continue;
 
                 for (const vlc_ml_media_t & media : ml_range_iterate<vlc_ml_media_t>(list))
-                    ctx.items.emplace_back(vlc_ml_get_input_item(ml, media.i_id), false);
+                    if (auto item = inputItemWithStoredSlaves(ml, media.i_id, &media))
+                        ctx.items.push_back(std::move(item));
             }
         }
     },
@@ -339,6 +456,43 @@ void MediaLib::mlInputItem(const QVector<MLItemId>& itemIdVector, QJSValue callb
 
         m_inputItemQuery.erase(it);
     });
+}
+
+void MediaLib::addExternalSubtitle(const MLItemId& itemId, const QUrl& subtitle)
+{
+    enum slave_type type;
+    const QFileInfo file(subtitle.toLocalFile());
+    const QByteArray encoded = subtitle.toEncoded(QUrl::FullyEncoded);
+    if (!itemId.isValid() || itemId.hasParent() || !subtitle.isLocalFile()
+        || !file.isFile() || !file.isReadable()
+        || !input_item_slave_GetType(encoded.constData(), &type) || type != SLAVE_TYPE_SPU)
+    {
+        emit externalSubtitleAdded(itemId, subtitle, false);
+        return;
+    }
+    struct Context { bool success = false; };
+    runOnMLThread<Context>(this,
+        [itemId, encoded](vlc_medialibrary_t* ml, Context& ctx)
+        {
+            ml_unique_ptr<vlc_ml_media_t> media(vlc_ml_get_media(ml, itemId.id));
+            if (media && media->i_type == VLC_ML_MEDIA_TYPE_VIDEO)
+            {
+                // The ML rejects a duplicate external MRL. A verified existing
+                // association already satisfies the user's explicit mapping.
+                if (media->p_files)
+                    for (const auto& file : ml_range_iterate<vlc_ml_file_t>(media->p_files))
+                        if (file.i_type == VLC_ML_FILE_TYPE_SUBTITLE && file.b_present && file.psz_mrl &&
+                            !strcmp(file.psz_mrl, encoded.constData()))
+                            ctx.success = true;
+                if (!ctx.success)
+                    ctx.success = vlc_ml_media_add_external_mrl(ml, itemId.id, encoded.constData(),
+                                                              VLC_ML_FILE_TYPE_SUBTITLE) == VLC_SUCCESS;
+            }
+        },
+        [this, itemId, subtitle](quint64, Context& ctx)
+        {
+            emit externalSubtitleAdded(itemId, subtitle, ctx.success);
+        });
 }
 
 vlc_ml_event_callback_t* MediaLib::registerEventListener( void (*callback)(void*, const vlc_ml_event_t*), void* data)

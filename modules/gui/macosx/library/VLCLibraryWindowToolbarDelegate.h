@@ -57,6 +57,7 @@ extern NSString * const VLCLibraryWindowTrackingSeparatorToolbarItemIdentifier;
 
 - (IBAction)rendererControlAction:(id)sender;
 - (void)applyVisiblityFlags:(VLCLibraryWindowToolbarDisplayFlags)flags;
+- (void)updateLibraryHeaderWithTitle:(NSString *)title count:(nullable NSNumber *)count;
 
 @end
 

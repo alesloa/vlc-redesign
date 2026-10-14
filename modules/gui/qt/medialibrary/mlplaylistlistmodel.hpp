@@ -21,6 +21,7 @@
 
 // MediaLibrary includes
 #include "mlbasemodel.hpp"
+#include <QUrl>
 
 // Forward declarations
 struct vlc_medialibrary_t;
@@ -71,6 +72,10 @@ public:
 
 public: // Interface
     Q_INVOKABLE void create(const QString & name, const QVariantList& initialItems);
+
+    Q_INVOKABLE void createWithCover(const QString &name, const QVariantList &initialItems, const QUrl &cover);
+
+    Q_INVOKABLE bool setCustomCover(const MLItemId &playlistId, const QUrl &cover);
 
     Q_INVOKABLE void append(const MLItemId & playlistId, const QVariantList & ids);
 

@@ -61,6 +61,26 @@
 
 @implementation VLCLibraryPlaylistViewController
 
+- (void)presentLibraryItem:(id<VLCMediaLibraryItemProtocol>)libraryItem
+{
+    if (![libraryItem isKindOfClass:VLCMediaLibraryPlaylist.class]) return;
+    [self.dataSource reloadData];
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        typeof(self) self = weakSelf;
+        if (!self || self.libraryWindow.librarySegmentViewController != self) return;
+        NSInteger row = [self.dataSource rowForLibraryItem:libraryItem];
+        if (row == NSNotFound || row < 0) return;
+        [self.masterTableView selectRowIndexes:[NSIndexSet indexSetWithIndex:row] byExtendingSelection:NO];
+        [self.masterTableView scrollRowToVisible:row];
+        NSIndexPath *path = [NSIndexPath indexPathForItem:row inSection:0];
+        NSSet *selection = [NSSet setWithObject:path];
+        self.collectionView.selectionIndexPaths = selection;
+        [self.collectionViewDelegate collectionView:self.collectionView didSelectItemsAtIndexPaths:selection];
+        [self.collectionView scrollToItemsAtIndexPaths:selection scrollPosition:NSCollectionViewScrollPositionNearestHorizontalEdge | NSCollectionViewScrollPositionNearestVerticalEdge];
+    });
+}
+
 - (instancetype)initWithLibraryWindow:(VLCLibraryWindow *)libraryWindow
 {
     self = [super initWithLibraryWindow:libraryWindow];

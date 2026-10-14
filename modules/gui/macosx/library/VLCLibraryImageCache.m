@@ -34,6 +34,7 @@
 #import "playqueue/VLCPlayQueueItem.h"
 
 #import <ImageIO/ImageIO.h>
+#include <sys/stat.h>
 
 #import <vlc_configuration.h>
 #import <vlc_hash.h>
@@ -61,8 +62,10 @@ const NSUInteger kVLCCompositeImageDefaultCompositedGridItemCount = 4;
     NSString *_thumbnailCacheDirectory;
     NSMutableDictionary<NSString *, VLCThumbnailRequest *> *_pendingThumbnailRequests;
     NSMutableDictionary<NSString *, NSMutableArray<void (^)(const NSImage *)> *> *_pendingRemoteArtworkRequests;
+    NSMutableDictionary<NSString *, NSMutableArray<void (^)(const NSImage *)> *> *_pendingArtworkRequests;
     NSURLSession *_remoteArtworkSession;
 }
+@property (atomic) BOOL interfaceTerminating;
 
 - (void)thumbnailRequest:(VLCThumbnailRequest *)request
      didFinishWithStatus:(int)status
@@ -183,6 +186,7 @@ static NSString *thumbnailHashForString(NSString *string)
         _noArtImage = NSImage.VLCNoArtImage;
         _pendingThumbnailRequests = NSMutableDictionary.dictionary;
         _pendingRemoteArtworkRequests = NSMutableDictionary.dictionary;
+        _pendingArtworkRequests = NSMutableDictionary.dictionary;
 
         NSURLSessionConfiguration * const remoteArtworkSessionConfiguration =
             NSURLSessionConfiguration.ephemeralSessionConfiguration;
@@ -219,6 +223,8 @@ static NSString *thumbnailHashForString(NSString *string)
         }
 
         NSNotificationCenter * const notificationCenter = [NSNotificationCenter defaultCenter];
+        [notificationCenter addObserver:self selector:@selector(interfaceWillTerminate:)
+                                   name:NSApplicationWillTerminateNotification object:nil];
         [notificationCenter addObserver:self
                                selector:@selector(mediaItemThumbnailGenerated:)
                                    name:VLCLibraryModelMediaItemThumbnailGenerated
@@ -239,6 +245,13 @@ static NSString *thumbnailHashForString(NSString *string)
 {
     [_remoteArtworkSession invalidateAndCancel];
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)interfaceWillTerminate:(NSNotification *)notification
+{
+    self.interfaceTerminating = YES;
+    [_remoteArtworkSession invalidateAndCancel];
+    @synchronized (self) { [_pendingArtworkRequests removeAllObjects]; }
 }
 
 - (void)pruneStoredThumbnailCache
@@ -280,15 +293,16 @@ static NSString *thumbnailHashForString(NSString *string)
 
     NSString * const sourceKey = inputItem.path;
     NSString * const sourceHash = thumbnailHashForString(sourceKey);
-    NSDictionary * const sourceAttributes =
-        [NSFileManager.defaultManager attributesOfItemAtPath:inputItem.path error:NULL];
-    NSDate * const modificationDate = sourceAttributes[NSFileModificationDate];
-    NSNumber * const sourceSize = sourceAttributes[NSFileSize];
+    // The cache key needs only size/date. Foundation's full attributes call also
+    // reads extended attributes, which can wait indefinitely on a mounted volume.
+    struct stat sourceAttributes;
+    if (stat(inputItem.path.fileSystemRepresentation, &sourceAttributes) != 0) return nil;
+    const NSTimeInterval modificationDate = sourceAttributes.st_mtimespec.tv_sec + sourceAttributes.st_mtimespec.tv_nsec / 1e9;
     NSString * const identifier = [NSString stringWithFormat:@"%@-%@-%llu-%.6f-%ux%u-%.6f",
                                    sourceKey,
                                    cacheKey,
-                                   sourceSize.unsignedLongLongValue,
-                                   modificationDate.timeIntervalSince1970,
+                                   (unsigned long long)sourceAttributes.st_size,
+                                   modificationDate,
                                    kVLCDesiredThumbnailWidth,
                                    kVLCDesiredThumbnailHeight,
                                    kVLCDefaultThumbnailPosition];
@@ -532,6 +546,7 @@ static NSString *thumbnailHashForString(NSString *string)
 - (void)generateArtworkForInputItem:(VLCInputItem *)inputItem
                      withCompletion:(void(^)(const NSImage *))completionHandler
 {
+    if (self.interfaceTerminating) return;
     NSURL * const artworkURL = inputItem.artworkURL;
     const NSSize imageSize = NSMakeSize(kVLCDesiredThumbnailWidth, kVLCDesiredThumbnailHeight);
     NSString * const memoryCacheKey = inputItem.MRL;
@@ -543,7 +558,27 @@ static NSString *thumbnailHashForString(NSString *string)
         return;
     }
 
+    // A queue row and compact/full library can request the same artwork together.
+    // Share one filesystem/cache lookup and deliver its real result to each view.
+    if (memoryCacheKey.length > 0) {
+        @synchronized (self) {
+            NSMutableArray *pending = _pendingArtworkRequests[memoryCacheKey];
+            if (pending) { [pending addObject:[completionHandler copy]]; return; }
+            _pendingArtworkRequests[memoryCacheKey] = [NSMutableArray arrayWithObject:[completionHandler copy]];
+        }
+        completionHandler = ^(const NSImage *image) {
+            NSArray *handlers;
+            @synchronized (self) {
+                handlers = [self->_pendingArtworkRequests[memoryCacheKey] copy];
+                [self->_pendingArtworkRequests removeObjectForKey:memoryCacheKey];
+            }
+            if (self.interfaceTerminating) return;
+            for (void (^handler)(const NSImage *) in handlers) handler(image);
+        };
+    }
+
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        if (self.interfaceTerminating) return;
         NSImage * const image = artworkURL
             ? [VLCLibraryImageCache downsampledImageFromURL:artworkURL
                                                maxPixelSize:kVLCDesiredThumbnailWidth]
@@ -576,6 +611,7 @@ static NSString *thumbnailHashForString(NSString *string)
             [self generateVLCThumbnailForInputItem:inputItem
                                           cacheKey:inputItem.MRL
                                         completion:^(NSImage * const thumbnail) {
+                if (self.interfaceTerminating) return;
                 if (thumbnail != nil) {
                     const NSUInteger cost = [VLCLibraryImageCache costForImage:thumbnail];
                     [self->_imageCache setObject:thumbnail forKey:memoryCacheKey cost:cost];
@@ -661,7 +697,16 @@ static NSString *thumbnailHashForString(NSString *string)
         _pendingThumbnailRequests[cacheKey] = request;
     }
 
-    vlc_preparser_t * const thumbnailer = getThumbnailer();
+    // Submitting on the interface queue serializes this with CloseIntf deleting
+    // the thumbnailer. Size/date/cache work above stays on the worker queue.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self submitThumbnailRequest:request forInputItem:inputItem];
+    });
+}
+
+- (void)submitThumbnailRequest:(VLCThumbnailRequest *)request forInputItem:(VLCInputItem *)inputItem
+{
+    vlc_preparser_t * const thumbnailer = self.interfaceTerminating ? NULL : getThumbnailer();
     if (thumbnailer == NULL || request.thumbnailPath == nil) {
         [self thumbnailRequest:request
            didFinishWithStatus:VLC_EGENERIC

@@ -45,6 +45,8 @@ public:
         MEDIA_VIDEO_TRACK,
         MEDIA_AUDIO_TRACK,
         MEDIA_TITLE_FIRST_SYMBOL,
+        // Append only: existing QML/model role identifiers remain stable.
+        MEDIA_IS_VIDEO,
     };
 
 public:

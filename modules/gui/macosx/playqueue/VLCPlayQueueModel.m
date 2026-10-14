@@ -61,7 +61,7 @@
 
 - (VLCPlayQueueItem *)playQueueItemAtIndex:(NSInteger)index
 {
-    if (index < 0 || index > _playQueueArray.count) {
+    if (index < 0 || index >= _playQueueArray.count) {
         return nil;
     }
     
@@ -80,9 +80,18 @@
 
 - (void)moveItemAtIndex:(size_t)index toTarget:(size_t)target
 {
-    VLCPlayQueueItem * const item = [_playQueueArray objectAtIndex:index];
-    [_playQueueArray removeObjectAtIndex:index];
-    [_playQueueArray insertObject:item atIndex:target];
+    [self moveItemsAtIndex:index count:1 toTarget:target];
+}
+
+- (void)moveItemsAtIndex:(size_t)index count:(size_t)count toTarget:(size_t)target
+{
+    // vlc_playlist_callbacks.on_items_moved supplies the whole moved slice
+    // and its final index. Keep the GUI cache identical for contiguous drags.
+    if (!count || index > _playQueueArray.count || count > _playQueueArray.count - index ||
+        target > _playQueueArray.count - count) return;
+    NSArray *items = [_playQueueArray subarrayWithRange:NSMakeRange(index, count)];
+    [_playQueueArray removeObjectsInRange:NSMakeRange(index, count)];
+    [_playQueueArray insertObjects:items atIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(target, count)]];
 }
 
 - (void)removeItemsInRange:(NSRange)range

@@ -82,11 +82,25 @@ NativeMenu {
             "action": removeFavorite,
             "visible": _showRemoveFavorite
         }, {
+            "text": qsTr("Pin"),
+            "action": togglePin,
+            "visible": function(dataList) { return dataList.length === 1 && LibraryPins.supported(dataList[0][root.idDataRole]) && !LibraryPins.contains(dataList[0][root.idDataRole]) }
+        }, {
+            "text": qsTr("Unpin"),
+            "action": togglePin,
+            "visible": function(dataList) { return dataList.length === 1 && LibraryPins.supported(dataList[0][root.idDataRole]) && LibraryPins.contains(dataList[0][root.idDataRole]) }
+        }, {
             "text": (root.showPlayAsAudioAction ? qsTr("Add to a video-only playlist") : qsTr("Add to an audio-only playlist")),
             "action": (root.showPlayAsAudioAction ? root.addToVideoOnlyPlaylist : root.addToAudioOnlyPlaylist)
         }, {
             "text": qsTr("Add to a playlist"),
             "action": addToAPlaylist
+        }, {
+            // Source: Figma's Add Subtitles workflow. The dialog enumerates
+            // only the actual selected IDs and accepts explicit file mapping.
+            "text": qsTr("Add Subtitles"),
+            "action": addSubtitles,
+            "visible": _showAddSubtitles
         }, {
             "text": qsTr("Mark as seen"),
             "action": markSeen,
@@ -168,12 +182,21 @@ NativeMenu {
         DialogsProvider.playlistsDialog(_mlIDList(dataList), type)
     }
 
+    function addSubtitles(dataList, options, indexes) {
+        const row = dataList.length === 1 ? dataList[0] : null
+        DialogsProvider.addSubtitlesDialog(_mlIDList(dataList), row?.title ?? row?.name ?? "")
+    }
+
     function addFavorite(dataList, options, indexes) {
         model.setMediaIsFavorite(indexes[0], true)
     }
 
     function removeFavorite(dataList, options, indexes) {
         model.setMediaIsFavorite(indexes[0], false)
+    }
+
+    function togglePin(dataList, options, indexes) {
+        LibraryPins.toggle(dataList[0][root.idDataRole])
     }
 
     function markSeen(dataList, options, indexes) {
@@ -230,6 +253,22 @@ NativeMenu {
 
     function _showSeen(dataList, options, indexes) {
         return _checkRole(dataList, "isNew", true)
+    }
+
+    function _showAddSubtitles(dataList) {
+        if (!root.model.ml || dataList.length === 0)
+            return false
+        return dataList.some(row => {
+            const id = row[root.idDataRole]
+            if (!id || !id.isValid())
+                return false
+            if (!id.hasParent())
+                return row.isVideo === true
+            const serialized = id.toString()
+            return serialized.startsWith("VLC_ML_PARENT_FOLDER") ||
+                   serialized.startsWith("VLC_ML_PARENT_GROUP") ||
+                   serialized.startsWith("VLC_ML_PARENT_PLAYLIST")
+        })
     }
 
     function _showUnseen(dataList, options, indexes) {

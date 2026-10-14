@@ -41,6 +41,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (instancetype)initWithLibraryWindow:(VLCLibraryWindow *)libraryWindow;
 - (void)selectSegment:(NSInteger)segmentType;
+- (void)synchronizeSelectedSegment:(NSInteger)segmentType;
 
 @end
 

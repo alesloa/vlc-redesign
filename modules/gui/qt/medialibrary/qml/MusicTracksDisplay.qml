@@ -34,6 +34,8 @@ Widgets.PageExt {
     property alias selectionModel: tracklistdisplay_id.selectionModel
 
     property var sortModel: [
+        { text: qsTr("Newest First"), criteria: "insertion", order: Qt.DescendingOrder },
+        { text: qsTr("Oldest First"), criteria: "insertion", order: Qt.AscendingOrder },
         { text: qsTr("Title"),    criteria: "title"},
         { text: qsTr("Album"),    criteria: "album_title" },
         { text: qsTr("Artist"),   criteria: "main_artist" },

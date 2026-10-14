@@ -51,6 +51,13 @@ Item {
     // model is associated row data of delegate
     signal playClicked(var model)
 
+    function knownMediaDuration(value) {
+        // ML's unknown duration (-1 ms) is a constructed VLCDuration. Its
+        // validity bit alone does not distinguish that sentinel from a time.
+        return !!value && value.valid() && value.toSeconds() >= 0
+               && (!value.isSubSecond() || value.scale(1000).toSeconds() >= 0)
+    }
+
     function getCriterias(colModel, rowModel) {
         if (colModel === null || rowModel === null)
             return ""
@@ -60,27 +67,29 @@ Item {
         if (criterias === undefined || criterias.length === 0)
             return ""
 
-        let string = ""
+        const parts = []
 
         for (let i = 0; i < criterias.length; i++) {
-            if (i) string += " • "
-
             const criteria = criterias[i]
 
             const value = rowModel[criteria]
 
+            if (value === undefined || value === null || value === "")
+                continue
+            if (criteria === "duration" && !root.knownMediaDuration(value))
+                continue
             if (value.formatShort) {
-                string += value.formatShort()
+                parts.push(value.formatShort())
             } else if (criteria === "nb_tracks") {
-                string += qsTr("%1 track", "%1 tracks", value).arg(value)
+                parts.push(qsTr("%1 track", "%1 tracks", value).arg(value))
             } else if (criteria === "nb_videos") {
-                string += qsTr("%1 video", "%1 videos", value).arg(value)
+                parts.push(qsTr("%1 video", "%1 videos", value).arg(value))
             } else {
-                string += value
+                parts.push(value)
             }
         }
 
-        return string
+        return parts.join(" • ")
     }
 
     property Component titleDelegate: TableRowDelegate {
@@ -219,7 +228,8 @@ Item {
             anchors.centerIn: parent
 
             horizontalAlignment: Text.AlignHCenter
-            text: timeDel.rowModel?.[timeDel.colModel.criteria]?.formatShort() ?? ""
+            text: timeDel.colModel.criteria === "duration" && !root.knownMediaDuration(timeDel.rowModel?.duration)
+                  ? "" : timeDel.rowModel?.[timeDel.colModel.criteria]?.formatShort() ?? ""
             color: timeDel.selected
                 ? timeDel.colorContext.fg.highlight
                 : timeDel.colorContext.fg.primary

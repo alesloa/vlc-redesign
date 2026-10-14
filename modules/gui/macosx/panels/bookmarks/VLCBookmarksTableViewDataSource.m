@@ -54,9 +54,9 @@ static void bookmarksLibraryCallback(void *p_data, const vlc_ml_event_t *p_event
         case VLC_ML_EVENT_BOOKMARKS_DELETED:
         case VLC_ML_EVENT_BOOKMARKS_UPDATED:
         {
+            VLCBookmarksTableViewDataSource *dataSource = (__bridge VLCBookmarksTableViewDataSource *)p_data;
             // Need to reload data on main queue
             dispatch_async(dispatch_get_main_queue(), ^{
-                VLCBookmarksTableViewDataSource *dataSource = (__bridge VLCBookmarksTableViewDataSource *)p_data;
                 [dataSource updateBookmarks];
             });
         }
@@ -99,16 +99,47 @@ static void bookmarksLibraryCallback(void *p_data, const vlc_ml_event_t *p_event
 {
     _playerController = VLCMain.sharedInstance.playQueueController.playerController;
     _mediaLibrary = vlc_ml_instance_get(getIntf());
+    if (_mediaLibrary == NULL) {
+        _libraryItemId = -1;
+        _bookmarks = @[];
+        return;
+    }
     [self updateLibraryItemId];
 
     [NSNotificationCenter.defaultCenter addObserver:self
                                            selector:@selector(currentMediaItemChanged:)
                                                name:VLCPlayerCurrentMediaItemChanged
                                              object:nil];
+    // A sidebar is retained by its window after the interface begins shutting down.
+    // Release the ML callback before libvlc releases the optional library provider.
+    [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(applicationWillTerminate:)
+                                               name:NSApplicationWillTerminateNotification
+                                             object:nil];
 
     _eventCallback = vlc_ml_event_register_callback(_mediaLibrary,
                                                     bookmarksLibraryCallback,
                                                     (__bridge void *)self);
+}
+
+- (void)dealloc
+{
+    [self invalidate];
+}
+
+- (void)applicationWillTerminate:(NSNotification *)notification
+{
+    [self invalidate];
+}
+
+- (void)invalidate
+{
+    [NSNotificationCenter.defaultCenter removeObserver:self];
+    if (_eventCallback != NULL) {
+        vlc_ml_event_unregister_callback(_mediaLibrary, _eventCallback);
+        _eventCallback = NULL;
+    }
+    _mediaLibrary = NULL;
 }
 
 - (void)updateLibraryItemId
@@ -127,7 +158,7 @@ static void bookmarksLibraryCallback(void *p_data, const vlc_ml_event_t *p_event
 
 - (void)updateBookmarks
 {
-    if (_libraryItemId <= 0) {
+    if (_mediaLibrary == NULL || _libraryItemId <= 0) {
         _bookmarks = [NSArray array];
         [_tableView reloadData];
         return;
@@ -252,7 +283,7 @@ static void bookmarksLibraryCallback(void *p_data, const vlc_ml_event_t *p_event
 
 - (void)addBookmark
 {
-    if (_libraryItemId <= 0) {
+    if (_mediaLibrary == NULL || _libraryItemId <= 0) {
         return;
     }
 
@@ -270,7 +301,7 @@ static void bookmarksLibraryCallback(void *p_data, const vlc_ml_event_t *p_event
 
 - (void)editBookmark:(VLCBookmark *)bookmark originalBookmark:(VLCBookmark *)originalBookmark
 {
-    if (_libraryItemId <= 0) {
+    if (_mediaLibrary == NULL || _libraryItemId <= 0) {
         return;
     }
 
@@ -290,7 +321,7 @@ static void bookmarksLibraryCallback(void *p_data, const vlc_ml_event_t *p_event
 
 - (void)removeBookmarkWithTime:(const int64_t)bookmarkTime
 {
-    if (_libraryItemId <= 0) {
+    if (_mediaLibrary == NULL || _libraryItemId <= 0) {
         return;
     }
 
@@ -305,7 +336,7 @@ static void bookmarksLibraryCallback(void *p_data, const vlc_ml_event_t *p_event
 
 - (void)clearBookmarks
 {
-    if (_libraryItemId <= 0) {
+    if (_mediaLibrary == NULL || _libraryItemId <= 0) {
         return;
     }
 

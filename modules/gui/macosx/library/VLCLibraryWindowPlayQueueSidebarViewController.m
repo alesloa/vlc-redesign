@@ -38,6 +38,8 @@
 
 #import "playqueue/VLCPlayQueueController.h"
 #import "playqueue/VLCPlayQueueDataSource.h"
+#import "playqueue/VLCPlayQueueModel.h"
+#import "playqueue/VLCPlayQueueItem.h"
 #import "playqueue/VLCPlayQueueSortingMenuController.h"
 
 #import "views/VLCDragDropView.h"
@@ -49,6 +51,7 @@
 @implementation VLCLibraryWindowPlayQueueSidebarViewController
 {
     CAGradientLayer *_scrollViewGradientMask;
+    NSSearchField *_queueSearch;
 }
 
 @synthesize counterLabel = _counterLabel;
@@ -72,12 +75,15 @@
     self.dataSource.dragDropView = self.dragDropView;
     self.dataSource.counterTextField = self.counterLabel;
     [self.dataSource prepareForUse];
-    self.playQueueController.playQueueDataSource = self.dataSource;
+    if (!self.playQueueController.playQueueDataSource)
+        self.playQueueController.playQueueDataSource = self.dataSource;
     [self.dataSource playQueueUpdated];
 
     self.tableView.dataSource = self.dataSource;
     self.tableView.delegate = self.dataSource;
-    self.tableView.rowHeight = VLCUIUnits.mediumTableViewRowHeight;
+    self.tableView.identifier = @"VLCRedesignedQueueTable";
+    self.tableView.rowHeight = 32;
+    self.tableView.intercellSpacing=NSMakeSize(0,12);
     [self.tableView reloadData];
 
     self.openMediaButton.title = _NS("Open media...");
@@ -121,7 +127,79 @@
                                name:VLCPlaybackRepeatChanged
                              object:nil];
 
-    [self setupBlurredHeaderFooter];
+    [self setupQueueShell];
+}
+- (void)setupQueueShell
+{
+    // Figma Queue463:831:20px margins,24px actions and32px rows/12px gaps.
+    // Search/Insert/Sort/Clear reuse the real queue and original file chooser.
+    NSTableView *table=self.tableView;VLCDragDropView *drop=self.dragDropView;
+    NSArray *buttons=@[self.shuffleButton,self.repeatButton,self.sortButton,self.clearButton];
+    NSButton *insert=self.openMediaButton;
+    for(NSView *view in self.view.subviews.copy)[view removeFromSuperview];
+    self.view.identifier=@"VLCRedesignedQueuePane";
+    self.view.wantsLayer=YES;
+    NSStackView *actions=[NSStackView stackViewWithViews:buttons];actions.spacing=12;actions.translatesAutoresizingMaskIntoConstraints=NO;
+    [self.view addSubview:actions];
+    for(NSButton *button in buttons){button.bordered=NO;[NSLayoutConstraint activateConstraints:@[[button.widthAnchor constraintEqualToConstant:24],[button.heightAnchor constraintEqualToConstant:24]]];}
+    self.sortButton.image=[NSImage vlc_redesignImageNamed:@"library-sort"] ?: self.sortButton.image;
+    self.clearButton.image=[NSImage vlc_redesignImageNamed:@"queue-remove"];
+    _queueSearch=[NSSearchField new];_queueSearch.placeholderString=_NS("Search");_queueSearch.delegate=self;
+    _queueSearch.font=[NSFont vlc_redesignFontOfSize:14 weight:NSFontWeightRegular];
+    _queueSearch.bezelStyle=NSTextFieldSquareBezel;
+    _queueSearch.bezeled=NO;
+    _queueSearch.wantsLayer=YES;
+    _queueSearch.layer.cornerRadius=6;
+    _queueSearch.identifier=@"VLCRedesignedSettingsCard";
+    _queueSearch.translatesAutoresizingMaskIntoConstraints=NO;[self.view addSubview:_queueSearch];
+    insert.title=_NS("Insert");insert.target=self;insert.action=@selector(insertMedia:);insert.translatesAutoresizingMaskIntoConstraints=NO;
+    insert.bordered=NO;insert.wantsLayer=YES;insert.layer.cornerRadius=6;
+    insert.identifier=@"VLCRedesignedSettingsSidebar";
+    insert.attributedTitle=[[NSAttributedString alloc] initWithString:insert.title attributes:@{NSForegroundColorAttributeName:NSColor.VLCControlForegroundColor,NSFontAttributeName:[NSFont vlc_redesignFontOfSize:14 weight:NSFontWeightRegular]}];
+    [self.view addSubview:insert];
+    NSScrollView *scroll=[NSScrollView new];scroll.translatesAutoresizingMaskIntoConstraints=NO;scroll.hasVerticalScroller=YES;
+    scroll.drawsBackground=NO;scroll.documentView=table;table.headerView=nil;[self.view addSubview:scroll];
+    drop.translatesAutoresizingMaskIntoConstraints=NO;[self.view addSubview:drop];
+    [NSLayoutConstraint activateConstraints:@[
+        [actions.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:20],[actions.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [_queueSearch.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],[_queueSearch.trailingAnchor constraintEqualToAnchor:insert.leadingAnchor constant:-8],
+        [_queueSearch.topAnchor constraintEqualToAnchor:actions.bottomAnchor constant:20],[_queueSearch.heightAnchor constraintEqualToConstant:32],
+        [insert.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],[insert.centerYAnchor constraintEqualToAnchor:_queueSearch.centerYAnchor],
+        [insert.widthAnchor constraintEqualToConstant:76],[insert.heightAnchor constraintEqualToConstant:32],
+        [scroll.leadingAnchor constraintEqualToAnchor:_queueSearch.leadingAnchor],[scroll.trailingAnchor constraintEqualToAnchor:insert.trailingAnchor],
+        [scroll.topAnchor constraintEqualToAnchor:_queueSearch.bottomAnchor constant:12],[scroll.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:-20],
+        [drop.leadingAnchor constraintEqualToAnchor:scroll.leadingAnchor],[drop.trailingAnchor constraintEqualToAnchor:scroll.trailingAnchor],
+        [drop.topAnchor constraintEqualToAnchor:scroll.topAnchor],[drop.bottomAnchor constraintEqualToAnchor:scroll.bottomAnchor]
+    ]];
+    self.scrollView=scroll;[self.view vlc_applyRedesignStyle];
+}
+- (void)viewDidLayout
+{
+    [super viewDidLayout];
+    // Reparenting the original table out of its old510px nib clip must also
+    // fit the live column to this pane, otherwise its duration/remove buttons
+    // remain beyond the400px pane's visible trailing edge.
+    CGFloat width = self.scrollView.contentSize.width;
+    if (width <= 0.) return;
+    self.tableView.autoresizingMask = NSViewWidthSizable;
+    [self.tableView setFrameSize:NSMakeSize(width, NSHeight(self.tableView.frame))];
+    self.tableView.tableColumns.firstObject.width = width;
+    [self.tableView sizeLastColumnToFit];
+}
+- (void)controlTextDidChange:(NSNotification *)notification
+{
+    if(notification.object==_queueSearch)self.dataSource.searchQuery=_queueSearch.stringValue;
+}
+- (void)insertMedia:(id)sender
+{
+    NSUInteger selected=[self.dataSource modelIndexForVisibleRow:self.tableView.selectedRow];
+    uint64_t identifier=selected==NSNotFound?0:[self.playQueueController.playQueueModel playQueueItemAtIndex:selected].uniqueID;
+    [VLCMain.sharedInstance.open openFileWithAction:^(NSArray *files){
+        NSArray *items=self.playQueueController.playQueueModel.playQueueItems;
+        NSUInteger position=items.count;
+        if(identifier){NSUInteger index=[items indexOfObjectPassingTest:^BOOL(VLCPlayQueueItem *item,NSUInteger index,BOOL *stop){return item.uniqueID==identifier;}];if(index!=NSNotFound)position=index+1;}
+        [self.playQueueController addPlayQueueItems:files atPosition:position startPlayback:NO];
+    }];
 }
 
 - (void)setupScrollViewGradientMask
@@ -241,7 +319,8 @@
 
 - (NSString *)title
 {
-    return _NS("Play Queue");
+    // Figma node 6320:13763 labels the existing play queue tab "Queue".
+    return _NS("Queue");
 }
 
 - (BOOL)supportsItemCount
@@ -271,6 +350,12 @@
     } else {
         self.bottomButtonsSeparator.borderColor = NSColor.VLClibrarySeparatorLightColor;
     }
+    // Resolve concrete layer colors after the view inherits the new app
+    // appearance, including System; original separator updates remain intact.
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (weakSelf.isViewLoaded) [weakSelf.view vlc_applyRedesignStyle];
+    });
 }
 
 #pragma mark - table view interaction
@@ -281,7 +366,8 @@
     if (selectedRow == -1) {
         return;
     }
-    [VLCMain.sharedInstance.playQueueController playItemAtIndex:selectedRow];
+    NSUInteger index=[self.dataSource modelIndexForVisibleRow:selectedRow];
+    if(index!=NSNotFound)[VLCMain.sharedInstance.playQueueController playItemAtIndex:index];
 }
 
 #pragma mark - open media handling
@@ -304,6 +390,14 @@
 
 - (void)shuffleStateUpdated:(NSNotification *)aNotification
 {
+    NSImage *exported=[NSImage vlc_redesignImageNamed:@"queue-shuffle"];
+    if(exported) {
+        BOOL active=self.playQueueController.playbackOrder!=VLC_PLAYLIST_PLAYBACK_ORDER_NORMAL;
+        self.shuffleButton.image=exported;
+        if(@available(macOS 10.14,*))self.shuffleButton.contentTintColor=active ? NSColor.VLCAccentColor : NSColor.VLCControlForegroundColor;
+        else if(active)self.shuffleButton.image=[exported imageTintedWithColor:NSColor.VLCAccentColor];
+        return;
+    }
     if (@available(macOS 11.0, *)) {
         self.shuffleButton.image = [NSImage imageWithSystemSymbolName:@"shuffle"
                                              accessibilityDescription:@"Shuffle"];
@@ -337,6 +431,13 @@
 - (void)repeatStateUpdated:(NSNotification *)aNotification
 {
     const enum vlc_playlist_playback_repeat repeatState = self.playQueueController.playbackRepeat;
+    NSImage *exported=[NSImage vlc_redesignImageNamed:@"queue-repeat"];
+    if(exported && repeatState!=VLC_PLAYLIST_PLAYBACK_REPEAT_CURRENT) {
+        self.repeatButton.image=exported;
+        if(@available(macOS 10.14,*))self.repeatButton.contentTintColor=repeatState==VLC_PLAYLIST_PLAYBACK_REPEAT_ALL ? NSColor.VLCAccentColor : NSColor.VLCControlForegroundColor;
+        else if(repeatState==VLC_PLAYLIST_PLAYBACK_REPEAT_ALL)self.repeatButton.image=[exported imageTintedWithColor:NSColor.VLCAccentColor];
+        return;
+    }
 
     if (@available(macOS 11.0, *)) {
         switch (repeatState) {

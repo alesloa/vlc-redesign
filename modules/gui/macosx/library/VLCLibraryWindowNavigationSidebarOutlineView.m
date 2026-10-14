@@ -26,6 +26,7 @@
 
 #import "library/VLCLibrarySegment.h"
 #import "library/VLCLibrarySegmentBookmarkedLocation.h"
+#import "library/VLCLibraryNavigationData.h"
 
 @implementation VLCLibraryWindowNavigationSidebarOutlineView
 
@@ -96,6 +97,12 @@
     const NSInteger row = [self rowAtPoint:location];
     NSTreeNode * const node = [self itemAtRow:row];
     VLCLibrarySegment * const segment = node.representedObject;
+    if ([segment.representedObject isKindOfClass:NSDictionary.class]) {
+        NSMenu *menu = [NSMenu new];
+        NSMenuItem *unpin = [[NSMenuItem alloc] initWithTitle:_NS("Unpin") action:@selector(unpinLibraryItem:) keyEquivalent:@""];
+        unpin.target = self; unpin.representedObject = segment.representedObject;
+        [menu addItem:unpin]; return menu;
+    }
     
     if ([segment.representedObject isKindOfClass:NSNumber.class]) {
         return nil;
@@ -135,6 +142,11 @@
 
     NSNotificationCenter * const defaultCenter = NSNotificationCenter.defaultCenter;
     [defaultCenter postNotificationName:VLCLibraryBookmarkedLocationsChanged object:descriptor];
+}
+
+- (void)unpinLibraryItem:(NSMenuItem *)sender
+{
+    [VLCLibraryNavigationData.sharedInstance setPinned:NO forItem:sender.representedObject];
 }
 
 @end

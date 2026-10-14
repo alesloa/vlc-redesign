@@ -223,7 +223,7 @@ static NSString *VLCRecentlyPlayedMediaListKey = @"recentlyPlayedMediaList";
     }
 
     [_resumeDialogController showWindowWithItem:libraryMediaItem.inputItem
-                               withLastPosition:(lastPlaybackPosition * duration) / 1000
+                               withLastPosition:SEC_FROM_VLC_TICK((vlc_tick_t)(lastPlaybackPosition * duration))
                                 completionBlock:completionBlock];
 }
 

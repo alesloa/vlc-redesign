@@ -194,7 +194,8 @@ FocusScope {
                 }
 
                 Widgets.CaptionLabel {
-                    text: (model && model.duration) ? model.duration.formatHMS() : ""
+                    text: model?.duration?.valid() && model.duration.toSeconds() >= 0 && (!model.duration.isSubSecond() || model.duration.scale(1000).toSeconds() >= 0)
+                          ? model.duration.formatHMS() : ""
                     color: theme.fg.primary
                     width: parent.width
                 }

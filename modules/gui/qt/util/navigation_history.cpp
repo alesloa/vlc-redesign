@@ -13,8 +13,22 @@ bool NavigationHistory::isPreviousEmpty()
     return m_history.size() <= 1;
 }
 
+bool NavigationHistory::isNextEmpty() const
+{
+    return m_forwardHistory.empty();
+}
+
+void NavigationHistory::clearForwardHistory()
+{
+    if (m_forwardHistory.empty())
+        return;
+    m_forwardHistory.clear();
+    emit nextEmptyChanged(true);
+}
+
 void NavigationHistory::push(QStringList path, const QVariantMap& properties, Qt::FocusReason focusReason)
 {
+    clearForwardHistory();
     auto prop = std::make_unique<QQmlPropertyMap>();
     for (auto it =  properties.keyValueBegin(); it != properties.keyValueEnd(); ++it)
         prop->insert((*it).first, (*it).second);
@@ -31,6 +45,7 @@ void NavigationHistory::push(QStringList path, const QVariantMap& properties, Qt
 
 void NavigationHistory::push(QStringList path, Qt::FocusReason focusReason)
 {
+    clearForwardHistory();
     m_history.emplace_back(path, std::make_unique<QQmlPropertyMap>());
 
     updateCurrent();
@@ -136,20 +151,47 @@ void NavigationHistory::update(QStringList path, const QVariantMap& properties)
 
 void NavigationHistory::previous(Qt::FocusReason reason)
 {
-    if (m_history.size() == 1)
+    if (m_history.size() <= 1)
         return;
 
+    const bool forwardWasEmpty = m_forwardHistory.empty();
+    m_forwardHistory.push_back(std::move(m_history.back()));
     m_history.pop_back();
 
-    while (!isNodeValid(*m_history.back().second)) {
+    while (m_history.size() > 1 && !isNodeValid(*m_history.back().second)) {
         m_history.pop_back();
-        if (m_history.size() == 1)
-            break;
     }
 
     if (m_history.size() == 1)
         emit previousEmptyChanged(true);
+    if (forwardWasEmpty)
+        emit nextEmptyChanged(false);
 
+    updateCurrent();
+    emit navigate(reason);
+}
+
+void NavigationHistory::next(Qt::FocusReason reason)
+{
+    if (m_forwardHistory.empty())
+        return;
+    // A network node can disappear while browsing. Use the same validity rule
+    // as Back and never navigate to a stale model reference.
+    while (!m_forwardHistory.empty()
+           && !isNodeValid(*m_forwardHistory.back().second))
+        m_forwardHistory.pop_back();
+    if (m_forwardHistory.empty())
+    {
+        emit nextEmptyChanged(true);
+        return;
+    }
+    const bool previousWasEmpty = isPreviousEmpty();
+    m_history.push_back(std::move(m_forwardHistory.back()));
+    m_forwardHistory.pop_back();
+    if (previousWasEmpty)
+        emit previousEmptyChanged(false);
+    if (m_forwardHistory.empty())
+        emit nextEmptyChanged(true);
     updateCurrent();
     emit navigate(reason);
 }

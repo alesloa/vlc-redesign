@@ -83,7 +83,17 @@ Widgets.IconToolButton {
         target: (_menu) ? _menu : null
 
         function onSelected(index: int) {
-            const selectedSortKey = root.model[index].criteria
+            if (index < 0 || index >= root.model.length)
+                return
+            const entry = root.model[index]
+            const selectedSortKey = entry.criteria
+
+            if (entry.order !== undefined) {
+                if (root.sortKey !== selectedSortKey)
+                    root.sortSelected(selectedSortKey)
+                root.sortOrderSelected(entry.order)
+                return
+            }
 
             if (root.sortKey !== selectedSortKey) {
                 root.sortSelected(selectedSortKey)
@@ -100,6 +110,7 @@ Widgets.IconToolButton {
     function show() {
         const model = root.model.map(function(modelData) {
             const checked = modelData.criteria === sortKey
+                            && (modelData.order === undefined || modelData.order === root.sortOrder)
             const order = checked ? root.sortOrder : undefined
             return {
                 "text": modelData.text,

@@ -33,8 +33,11 @@ extern NSString * const VLCMediaLibraryMediaItemUTI;
 @class VLCMediaLibraryArtist;
 @class VLCMediaLibraryGenre;
 @class VLCInputItem;
+@class VLCLibraryModel;
+NSArray<VLCMediaLibraryMediaItem *> *VLCMediaLibraryRecentItems(VLCLibraryModel * _Nullable model);
 
 vlc_medialibrary_t * _Nullable getMediaLibrary(void);
+struct input_item_t * _Nullable VLCMediaLibraryInputItemWithStoredTracks(vlc_medialibrary_t *library, int64_t mediaID);
 
 typedef NS_ENUM(NSUInteger, VLCMediaLibraryParentGroupType) {
     VLCMediaLibraryParentGroupTypeUnknown = VLC_ML_PARENT_UNKNOWN,

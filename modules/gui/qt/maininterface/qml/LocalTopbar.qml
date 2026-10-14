@@ -26,6 +26,7 @@ import QtQuick.Window
 import VLC.MainInterface
 import VLC.Style
 import VLC.Playlist
+import VLC.Player
 import VLC.Widgets as Widgets
 import VLC.Menus as Menus
 import VLC.Util
@@ -36,7 +37,7 @@ T.ToolBar {
     Accessible.name: qsTr("Local top bar")
     AccessibleCompat.id: "localTopbar"
 
-    property bool useAcrylic: true
+    property bool useAcrylic: false
 
     // For now, used for d&d functionality
     // Not strictly necessary to set
@@ -68,7 +69,7 @@ T.ToolBar {
 
     background:  Widgets.AcrylicBackground {
         enabled: root.useAcrylic
-        tintColor: theme.bg.primary
+        tintColor: theme.bg.secondary
     }
 
     contentItem: Item {
@@ -123,9 +124,12 @@ T.ToolBar {
 
                 Widgets.IconToolButton {
                     id: historyBack
+                    visible: !MainCtx.hasGridListMode
 
                     font.pixelSize: VLCStyle.icon_banner
                     text: VLCIcons.back
+                    iconSource: "qrc:/redesign/icons/library-back.svg"
+                    mirrorIcon: true
                     description: qsTr("Previous")
 
                     AccessibleCompat.id: "historyBackButton"
@@ -143,6 +147,24 @@ T.ToolBar {
 
                     Navigation.parentItem: navigationButtons
                     Navigation.leftItem: navigationVisibilty
+                    Navigation.rightItem: historyForward
+                }
+
+                Widgets.IconToolButton {
+                    id: historyForward
+                    visible: historyBack.visible
+                    text: VLCIcons.back
+                    iconSource: "qrc:/redesign/icons/library-forward.svg"
+                    mirrorIcon: true
+                    // The walkthrough names the paired Back/Forward actions.
+                    description: qsTr("Forward")
+                    AccessibleCompat.id: "historyForwardButton"
+                    width: VLCStyle.bannerButton_width
+                    height: VLCStyle.bannerButton_height
+                    enabled: !History.nextEmpty
+                    onClicked: History.next()
+                    Navigation.parentItem: navigationButtons
+                    Navigation.leftItem: historyBack
                     Navigation.rightItem: playlistBtn
                 }
 
@@ -154,6 +176,18 @@ T.ToolBar {
                     color: theme.accent
                 }
             }
+        }
+
+        Widgets.ListLabel {
+            // Current media title comes from VLC's player model.
+            text: Player.title || Player.name || ""
+            visible: text.length > 0
+            anchors.centerIn: parent
+            width: Math.max(0, parent.width - 2 * Math.max(navigationButtons.implicitWidth,
+                playqueueButtonsTop.implicitWidth) - VLCStyle.margin_normal)
+            color: theme.fg.primary
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideMiddle
         }
 
         Item {
@@ -190,7 +224,7 @@ T.ToolBar {
 
                     Navigation.parentItem: playqueueButtonsTop
                     Navigation.rightItem: menuBtn
-                    Navigation.leftItem: historyBack
+                    Navigation.leftItem: historyForward.visible ? historyForward : navigationVisibilty
 
                     onClicked:  root.togglePlayqueueVisibility()
                 }

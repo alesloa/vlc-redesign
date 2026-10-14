@@ -1859,7 +1859,7 @@
                     <rect key="frame" x="253" y="228" width="188" height="120"/>
                     <imageCell key="cell" refusesFirstResponder="YES" alignment="left" imageScaling="proportionallyDown" imageFrameStyle="grayBezel" image="VLC" id="1yO-EP-f8Q"/>
                 </imageView>
-                <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="V2G-WY-Ewc" userLabel="Browse Button" customClass="VLCCustomEmptyLibraryBrowseButton">
+                <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="V2G-WY-Ewc" userLabel="Browse Button">
                     <rect key="frame" x="298" y="141" width="99" height="28"/>
                     <buttonCell key="cell" type="push" title="Browse" bezelStyle="rounded" imagePosition="left" alignment="center" borderStyle="border" inset="2" id="l2n-Ul-S0e">
                         <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES" changeBackground="YES" changeGray="YES"/>

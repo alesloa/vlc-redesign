@@ -114,6 +114,7 @@ NSString * const VLCLibraryVideoDataSourceDisplayedCollectionChangedNotification
 
 - (void)libraryModelVideoItemUpdated:(NSNotification * const)aNotification
 {
+    if(self.recentOnly) { [self reloadData]; return; }
     NSParameterAssert(aNotification);
     VLCMediaLibraryMediaItem * const notificationMediaItem = aNotification.object;
     NSAssert(notificationMediaItem != nil, @"Media item updated notification should carry valid media item");
@@ -124,6 +125,7 @@ NSString * const VLCLibraryVideoDataSourceDisplayedCollectionChangedNotification
 
 - (void)libraryModelVideoItemDeleted:(NSNotification * const)aNotification
 {
+    if(self.recentOnly) { [self reloadData]; return; }
     NSParameterAssert(aNotification);
     VLCMediaLibraryMediaItem * const notificationMediaItem = aNotification.object;
     NSAssert(notificationMediaItem != nil, @"Media item deleted notification should carry valid media item");
@@ -139,6 +141,7 @@ NSString * const VLCLibraryVideoDataSourceDisplayedCollectionChangedNotification
 
 - (void)libraryModelRecentsItemUpdated:(NSNotification * const)aNotification
 {
+    if(self.recentOnly) { [self reloadData]; return; }
     NSParameterAssert(aNotification);
     VLCMediaLibraryMediaItem * const notificationMediaItem = aNotification.object;
     NSAssert(notificationMediaItem != nil, @"Media item updated notification should carry valid media item");
@@ -149,6 +152,7 @@ NSString * const VLCLibraryVideoDataSourceDisplayedCollectionChangedNotification
 
 - (void)libraryModelRecentsItemDeleted:(NSNotification * const)aNotification
 {
+    if(self.recentOnly) { [self reloadData]; return; }
     NSParameterAssert(aNotification);
     VLCMediaLibraryMediaItem * const notificationMediaItem = aNotification.object;
     NSAssert(notificationMediaItem != nil, @"Media item deleted notification should carry valid media item");
@@ -160,6 +164,8 @@ NSString * const VLCLibraryVideoDataSourceDisplayedCollectionChangedNotification
 - (void)connect
 {
     NSNotificationCenter * const notificationCenter = NSNotificationCenter.defaultCenter;
+    for(NSString *name in @[VLCLibraryModelRecentAudioMediaListReset,VLCLibraryModelRecentAudioMediaItemUpdated,VLCLibraryModelRecentAudioMediaItemDeleted])
+        [notificationCenter addObserver:self selector:@selector(recentAudioChanged:) name:name object:nil];
 
     [notificationCenter addObserver:self
                            selector:@selector(libraryModelVideoListReset:)
@@ -192,6 +198,11 @@ NSString * const VLCLibraryVideoDataSourceDisplayedCollectionChangedNotification
                              object:nil];
 
     [self reloadData];
+}
+
+- (void)recentAudioChanged:(NSNotification *)notification
+{
+    if(self.recentOnly) [self reloadData];
 }
 
 - (void)disconnect
@@ -246,8 +257,8 @@ NSString * const VLCLibraryVideoDataSourceDisplayedCollectionChangedNotification
 
     [_collectionViewFlowLayout resetLayout];
 
-    self->_recentsArray = [[self.libraryModel listOfRecentMedia] mutableCopy];
-    self->_libraryArray = [[self.libraryModel listOfVideoMedia] mutableCopy];
+    self->_recentsArray = self.recentOnly ? [VLCMediaLibraryRecentItems(self.libraryModel) mutableCopy] : [[self.libraryModel listOfRecentMedia] mutableCopy];
+    self->_libraryArray = self.recentOnly ? [NSMutableArray array] : [[self.libraryModel listOfVideoMedia] mutableCopy];
 
     [self rebuildFlattenedRows];
 
@@ -391,7 +402,7 @@ NSString * const VLCLibraryVideoDataSourceDisplayedCollectionChangedNotification
     VLCMediaLibraryDummyItem * const groupItem =
         [[VLCMediaLibraryDummyItem alloc] initWithDisplayString:title
                                                  withMediaItems:groupArray];
-    return [[VLCLibraryRepresentedItem alloc] initWithItem:groupItem parentType:parentType];
+    return [[VLCLibraryRepresentedItem alloc] initWithItem:groupItem parentType:self.recentOnly ? VLCMediaLibraryParentGroupTypeUnknown : parentType];
 }
 
 #pragma mark - Table view data source (sectioned flat table)
@@ -404,7 +415,7 @@ NSString * const VLCLibraryVideoDataSourceDisplayedCollectionChangedNotification
 - (NSUInteger)rowToVideoGroupAdjustment
 {
     static const VLCMediaLibraryParentGroupType firstEntry = VLCMediaLibraryParentGroupTypeRecentVideos;
-    const BOOL anyRecents = [self recentItemsPresent];
+    const BOOL anyRecents = self.recentOnly || [self recentItemsPresent];
     return anyRecents ? firstEntry : firstEntry + 1;
 }
 
@@ -480,7 +491,7 @@ NSString * const VLCLibraryVideoDataSourceDisplayedCollectionChangedNotification
 
 - (VLCMediaLibraryParentGroupType)currentParentType
 {
-    return VLCMediaLibraryParentGroupTypeVideoLibrary;
+    return self.recentOnly ? VLCMediaLibraryParentGroupTypeUnknown : VLCMediaLibraryParentGroupTypeVideoLibrary;
 }
 
 # pragma mark - collection view data source and delegation
@@ -501,12 +512,11 @@ NSString * const VLCLibraryVideoDataSourceDisplayedCollectionChangedNotification
 
 - (NSIndexPath *)indexPathForLibraryItem:(id<VLCMediaLibraryItemProtocol>)libraryItem
 {
-    const NSInteger row = [self rowForLibraryItem:libraryItem];
-    if (row == NSNotFound) {
-        return nil;
+    for(NSNumber *group in @[@(VLCMediaLibraryParentGroupTypeRecentVideos),@(VLCMediaLibraryParentGroupTypeVideoLibrary)]) {
+        NSUInteger index=[self indexOfMediaItem:libraryItem.libraryID inArray:[self arrayForGroup:group.integerValue]];
+        if(index!=NSNotFound) return [NSIndexPath indexPathForItem:index inSection:[self videoGroupToRow:group.integerValue]];
     }
-    const NSInteger section = [self videoGroupToRow:VLCMediaLibraryParentGroupTypeVideoLibrary];
-    return [NSIndexPath indexPathForItem:row inSection:section];
+    return nil;
 }
 
 - (NSArray<VLCLibraryRepresentedItem *> *)representedItemsAtIndexPaths:(NSSet<NSIndexPath *> *const)indexPaths
@@ -520,7 +530,7 @@ NSString * const VLCLibraryVideoDataSourceDisplayedCollectionChangedNotification
         const id<VLCMediaLibraryItemProtocol> libraryItem =
             [self libraryItemAtIndexPath:indexPath forCollectionView:collectionView];
         VLCLibraryRepresentedItem * const representedItem =
-            [[VLCLibraryRepresentedItem alloc] initWithItem:libraryItem parentType:parentType];
+            [[VLCLibraryRepresentedItem alloc] initWithItem:libraryItem parentType:self.recentOnly ? VLCMediaLibraryParentGroupTypeUnknown : parentType];
         [representedItems addObject:representedItem];
     }
 
@@ -531,7 +541,7 @@ NSString * const VLCLibraryVideoDataSourceDisplayedCollectionChangedNotification
 {
     switch (videoGroup) {
         case VLCMediaLibraryParentGroupTypeRecentVideos:
-            return _NS("Recents");
+            return self.recentOnly ? _NS("Recent") : _NS("Recents");
         case VLCMediaLibraryParentGroupTypeVideoLibrary:
             return _NS("Library");
         default:
@@ -542,7 +552,7 @@ NSString * const VLCLibraryVideoDataSourceDisplayedCollectionChangedNotification
 
 - (NSInteger)numberOfSectionsInCollectionView:(NSCollectionView *)collectionView
 {
-    _priorNumVideoSections = [self recentItemsPresent] ? 2 : 1;
+    _priorNumVideoSections = self.recentOnly ? ([self recentItemsPresent] ? 1 : 0) : ([self recentItemsPresent] ? 2 : 1);
     return _priorNumVideoSections;
 }
 
@@ -569,7 +579,7 @@ NSString * const VLCLibraryVideoDataSourceDisplayedCollectionChangedNotification
     const id<VLCMediaLibraryItemProtocol> item =
         [self libraryItemAtIndexPath:indexPath forCollectionView:collectionView];
     VLCLibraryRepresentedItem * const representedItem =
-        [[VLCLibraryRepresentedItem alloc] initWithItem:item parentType:parentType];
+        [[VLCLibraryRepresentedItem alloc] initWithItem:item parentType:self.recentOnly ? VLCMediaLibraryParentGroupTypeUnknown : parentType];
     viewItem.representedItem = representedItem;
     return viewItem;
 }

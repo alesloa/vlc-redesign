@@ -33,6 +33,8 @@
 #include <QPushButton>
 #include <QDialogButtonBox>
 #include <QTreeView>
+#include <QHeaderView>
+#include <QVBoxLayout>
 
 BookmarksDialog::BookmarksDialog( qt_intf_t *_p_intf ):QVLCFrame( _p_intf )
 {
@@ -41,9 +43,11 @@ BookmarksDialog::BookmarksDialog( qt_intf_t *_p_intf ):QVLCFrame( _p_intf )
     setWindowTitle( qtr( "Edit Bookmarks" ) );
     setWindowRole( "vlc-bookmarks" );
 
-    QHBoxLayout *layout = new QHBoxLayout( this );
+    QVBoxLayout *layout = new QVBoxLayout( this );
+    layout->setContentsMargins( 20, 16, 20, 16 );
+    layout->setSpacing( 16 );
 
-    QDialogButtonBox *buttonsBox = new QDialogButtonBox( Qt::Vertical );
+    QDialogButtonBox *buttonsBox = new QDialogButtonBox( Qt::Horizontal );
     addButton = new QPushButton( qtr( "Create" ) );
     addButton->setToolTip( qtr( "Create a new bookmark" ) );
     buttonsBox->addButton( addButton, QDialogButtonBox::ActionRole );
@@ -68,6 +72,8 @@ BookmarksDialog::BookmarksDialog( qt_intf_t *_p_intf ):QVLCFrame( _p_intf )
     m_model->setMl(_p_intf->p_mi->getMediaLibrary());
     bookmarksList->setModel( m_model );
     bookmarksList->setRootIsDecorated( false );
+    bookmarksList->setFrameShape( QFrame::NoFrame );
+    bookmarksList->header()->setSectionResizeMode( 0, QHeaderView::Stretch );
     bookmarksList->setAlternatingRowColors( true );
     /* Sort by default model order, otherwise column 0 will be used */
     bookmarksList->sortByColumn( -1, Qt::AscendingOrder );
@@ -79,8 +85,8 @@ BookmarksDialog::BookmarksDialog( qt_intf_t *_p_intf ):QVLCFrame( _p_intf )
 
     bookmarksList->resize( sizeHint() );
 
+    layout->addWidget( bookmarksList, 1 );
     layout->addWidget( buttonsBox );
-    layout->addWidget( bookmarksList );
 
     connect( bookmarksList, &QTreeView::activated, this, &BookmarksDialog::activateItem);
     connect( m_model, &QAbstractListModel::modelReset, this, &BookmarksDialog::updateButtons );
@@ -95,7 +101,7 @@ BookmarksDialog::BookmarksDialog( qt_intf_t *_p_intf ):QVLCFrame( _p_intf )
     connect( buttonsBox, &QDialogButtonBox::rejected, this, &BookmarksDialog::close);
     updateButtons();
 
-    restoreWidgetPosition( "Bookmarks", QSize( 435, 280 ) );
+    restoreWidgetPosition( "Bookmarks", QSize( 640, 420 ) );
     updateGeometry();
 }
 

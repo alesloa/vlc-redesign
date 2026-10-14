@@ -81,6 +81,8 @@
 - (void)setupCollectionView
 {
     _collectionViewLayout = VLCLibraryCollectionViewFlowLayout.standardLayout;
+    _collectionViewLayout.minimumLineSpacing = 40;
+    _collectionViewLayout.minimumInteritemSpacing = 20;
     _collectionViewLayout.headerReferenceSize = VLCLibraryCollectionViewSupplementaryElementView.defaultHeaderSize;
 
     _collectionView = [[VLCLibraryCollectionView alloc] initWithFrame:NSZeroRect];

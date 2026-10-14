@@ -20,20 +20,26 @@
 #include "qt.hpp"
 #include "style/vlcicons.hpp"
 
+#include <algorithm>
+
 //hierachical model entry
 struct ModelEntry
 {
-    ModelEntry( QString name, QString uri, QString icon = {}, QString iconSvg = {})
+    ModelEntry( QString name, QString uri, QString icon = {}, QString iconSvg = {},
+                QStringList targetUri = {})
         : name(name)
         , urinode(uri)
         , icon(icon)
         , icon_svg(iconSvg)
+        , targetUri(std::move(targetUri))
     {}
 
     const QString name;
     const QString urinode;
     const QString icon;
     const QString icon_svg;
+    // A rail shortcut can point at an existing page without changing its route.
+    const QStringList targetUri;
     std::vector<ModelEntry> children;
     size_t visibleChildren = 0;
     int expandedIndex = -1;
@@ -243,7 +249,10 @@ struct ModelEntry
         OutIterator out) const
     {
         if (it == end) {
-            *out = urinode;
+            if (targetUri.isEmpty())
+                *out = urinode;
+            else
+                std::copy(targetUri.cbegin(), targetUri.cend(), out);
             return;
         }
 
@@ -269,7 +278,7 @@ public:
 
         if (m_hasMedialib)
         {
-            ModelEntry videoEntry{ qtr("Video"), "video", VLCIcons::topbar_video, QStringLiteral(":/icons/ic_fluent_filmstrip.svg") };
+            ModelEntry videoEntry{ qtr("Videos"), "video", VLCIcons::topbar_video, QStringLiteral(":/icons/ic_fluent_filmstrip.svg") };
             videoEntry.children.emplace_back(qtr("All"), "all");
             videoEntry.children.emplace_back(qtr("Playlists"), "playlists");
             m_model.children.push_back(std::move(videoEntry));
@@ -283,7 +292,16 @@ public:
             m_model.children.push_back(std::move(musicEntry));
         }
 
-        m_model.children.emplace_back(qtr("Browse"), "network", VLCIcons::topbar_network, QStringLiteral(":/icons/ic_fluent_wifi_1.svg"));
+        m_model.children.emplace_back(qtr("Network"), "network", VLCIcons::topbar_network, QStringLiteral(":/icons/ic_fluent_wifi_1.svg"));
+
+        if (m_hasMedialib)
+        {
+            m_model.children.emplace_back(qtr("Playlists"), "playlists", VLCIcons::playlist,
+                QStringLiteral(":/redesign/icons/playlists.svg"),
+                QStringList{QStringLiteral("video"), QStringLiteral("playlists")});
+            m_model.children.emplace_back(qtr("Recent"), "recent", VLCIcons::playlist,
+                QStringLiteral(":/redesign/icons/recent.svg"));
+        }
 
         ModelEntry discoverEntry{ qtr("Discover"), "discover", VLCIcons::topbar_discover, QStringLiteral(":/icons/ic_fluent_globe.svg") };
         discoverEntry.children.emplace_back(qtr("Services"), "services");

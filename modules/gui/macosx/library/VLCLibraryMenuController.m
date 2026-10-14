@@ -24,6 +24,7 @@
 
 #import "extensions/NSMenu+VLCAdditions.h"
 #import "extensions/NSMenuItem+VLCAdditions.h"
+#import "extensions/NSImage+VLCAdditions.h"
 #import "extensions/NSString+Helpers.h"
 
 #import "library/VLCInputItem.h"
@@ -31,6 +32,7 @@
 #import "library/VLCLibraryController.h"
 #import "library/VLCLibraryModel.h"
 #import "library/VLCLibraryRepresentedItem.h"
+#import "library/VLCLibrarySubtitleMappingController.h"
 #import "library/VLCLibrarySegment.h"
 #import "library/VLCLibraryWindow.h"
 
@@ -59,6 +61,8 @@
     NSMenuItem *_removeFromPlaylistItem;
     NSMenuItem *_informationItem;
     NSMenuItem *_renamePlaylistItem;
+    NSMenuItem *_subtitleMappingItem;
+    VLCLibrarySubtitleMappingController *_subtitleMappingController;
 
     VLCLibraryAddToPlaylistMenuController *_addToPlaylistMenuController;
     NSMenuItem *_addToPlaylistItem;
@@ -127,6 +131,9 @@
                                                      action:@selector(renamePlaylist:)
                                               keyEquivalent:@""];
     _renamePlaylistItem.target = self;
+    _subtitleMappingItem = [[NSMenuItem alloc] initWithTitle:_NS("Add Subtitles") action:@selector(addSubtitles:) keyEquivalent:@""];
+    _subtitleMappingItem.target = self;
+    _subtitleMappingItem.image = [NSImage vlc_redesignImageNamed:@"subtitles"];
 
     [playItem vlc_setActionImageWithSystemSymbolName:@"play.fill"];
     [appendItem vlc_setActionImageWithSystemSymbolName:@"text.line.last.and.arrowtriangle.forward"];
@@ -155,6 +162,7 @@
         _deleteItem,
         markUnseenItem,
         _informationItem,
+        _subtitleMappingItem,
         [NSMenuItem separatorItem],
         addItem
     ]];
@@ -167,6 +175,7 @@
     [_mediaItemRequiringMenuItems addObject:_revealItem];
     [_mediaItemRequiringMenuItems addObject:_deleteItem];
     [_mediaItemRequiringMenuItems addObject:_informationItem];
+    [_mediaItemRequiringMenuItems addObject:_subtitleMappingItem];
 
     _recentsMediaItemRequiringMenuItems = [NSHashTable weakObjectsHashTable];
     [_recentsMediaItemRequiringMenuItems addObject:markUnseenItem];
@@ -218,6 +227,7 @@
 
 - (void)updateMenuItems
 {
+    _subtitleMappingItem.hidden = YES;
     VLCLibraryModel * const libraryModel = VLCMain.sharedInstance.libraryController.libraryModel;
     NSArray<VLCMediaLibraryMediaItem *> * const recents = libraryModel.listOfRecentMedia;
     const BOOL isFavoritesSegment =
@@ -243,6 +253,7 @@
         [self menuItems:_localInputItemRequiringMenuItems setHidden:YES];
         [self menuItems:_folderInputItemRequiringMenuItems setHidden:YES];
         [self menuItems:_mediaItemRequiringMenuItems setHidden:NO];
+        _subtitleMappingItem.hidden = [self mediaItemsForSubtitleMapping].count == 0;
         _revealItem.hidden = ![self representedItemsCanBeRevealedInFinder];
 
         BOOL allInPlaylist = YES;
@@ -334,6 +345,7 @@
 
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem
 {
+    if (menuItem == _subtitleMappingItem) return [self mediaItemsForSubtitleMapping].count > 0;
     /* add media action is always available, every other action needs a represented item. */
     if (menuItem.action == @selector(addMedia:)) {
         return YES;
@@ -358,6 +370,43 @@
     }
 
     return YES;
+}
+
+- (NSArray<VLCMediaLibraryMediaItem *> *)mediaItemsForSubtitleMapping
+{
+    NSMutableArray *media = [NSMutableArray array]; NSMutableSet *ids = [NSMutableSet set];
+    for (VLCLibraryRepresentedItem *represented in self.representedItems) {
+        for (VLCMediaLibraryMediaItem *item in represented.item.mediaItems) {
+            NSNumber *identifier = @(item.libraryID);
+            if (item.libraryID > 0 && item.mediaType != VLC_ML_MEDIA_TYPE_AUDIO && ![ids containsObject:identifier]) {
+                [media addObject:item]; [ids addObject:identifier];
+            }
+        }
+    }
+    return media;
+}
+
+- (void)addSubtitles:(id)sender
+{
+    NSArray<VLCMediaLibraryMediaItem *> *items = [self mediaItemsForSubtitleMapping];
+    if (!items.count) return;
+    NSString *target = items.count == 1 ? _NS("To This File") : _NS("Subtitles");
+    BOOL playlist = YES;
+    for (VLCLibraryRepresentedItem *represented in self.representedItems)
+        if (represented.parentType != VLCMediaLibraryParentGroupTypePlaylist && ![represented.item isKindOfClass:VLCMediaLibraryPlaylist.class]) playlist = NO;
+    if (playlist) target = _NS("To This Playlist");
+    else if (items.count > 1) {
+        NSURL *folder = nil; BOOL sameFolder = YES;
+        for (VLCMediaLibraryMediaItem *item in items) {
+            NSURL *url = nil;
+            for (VLCMediaLibraryFile *file in item.files) if (file.fileType == VLC_ML_FILE_TYPE_MAIN) { url = file.fileURL.URLByDeletingLastPathComponent; break; }
+            if (!url || (folder && ![folder isEqual:url])) sameFolder = NO;
+            if (!folder) folder = url;
+        }
+        if (sameFolder && folder) target = _NS("To This Folder");
+    }
+    _subtitleMappingController = [[VLCLibrarySubtitleMappingController alloc] initWithMediaItems:items targetTitle:target];
+    [_subtitleMappingController showWindow:sender];
 }
 
 - (void)popupMenuWithEvent:(NSEvent *)theEvent forView:(NSView *)theView

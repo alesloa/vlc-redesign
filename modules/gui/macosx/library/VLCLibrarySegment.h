@@ -51,6 +51,7 @@ typedef NS_ENUM(NSInteger, VLCLibrarySegmentType) {
     VLCLibraryBrowseSegmentType,
     VLCLibraryBrowseBookmarkedLocationSubSegmentType,
     VLCLibraryStreamsSegmentType,
+    VLCLibraryRecentSegmentType,
     VLCLibraryHighSentinelSegment,
 };
 
@@ -69,6 +70,8 @@ typedef NS_ENUM(NSInteger, VLCLibrarySegmentType) {
 
 + (instancetype)segmentWithSegmentType:(VLCLibrarySegmentType)segmentType;
 + (instancetype)segmentForLibraryItem:(id<VLCMediaLibraryItemProtocol>)libraryItem;
++ (instancetype)segmentForPinnedEntry:(NSDictionary *)entry;
++ (instancetype)pinsHeaderSegment;
 - (nullable VLCLibraryAbstractSegmentViewController *)newLibraryViewController;
 - (void)presentLibraryViewUsingController:(VLCLibraryAbstractSegmentViewController *)controller;
 

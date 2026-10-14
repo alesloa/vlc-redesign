@@ -24,6 +24,7 @@ import VLC.Style
 import VLC.Widgets as Widgets
 
 import VLC.MainInterface
+import VLC.MediaLibrary
 import VLC.Dialogs
 import VLC.Util
 
@@ -31,6 +32,7 @@ T.Pane {
     id: root
 
     signal itemClicked(uri : var, item : Item)
+    signal pinRequested(uri : var, properties : var)
 
     //safe area margins for delegate content,
     //so the background of the delegates fills the available space
@@ -38,13 +40,13 @@ T.Pane {
     property int safeAreaLeftMargin: 0
     property int safeAreaRightMargin: 0
 
-    property bool useAcrylic: true
+    property bool useAcrylic: false
 
     property bool delegateShowText: true
 
     property alias model: navigationModel
 
-    readonly property int minimumWidth: VLCStyle.expandNavigationPaneWidth + safeAreaLeftMargin + safeAreaRightMargin
+    readonly property int minimumWidth: MainCtx.dp(217) + safeAreaLeftMargin + safeAreaRightMargin
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding)
@@ -70,27 +72,38 @@ T.Pane {
 
         // NOTE: handles cases where the path changes not by clicking in the sidebar
         function onViewPathChanged(viewPath) {
+            let bestRow = -1
+            let bestScore = -1
             for (let i = 0; i < listView.count; ++i) {
                 const rowIndex = navigationModel.index(i, 0)
                 const uri = navigationModel.data(rowIndex, NavigationModel.URI)
-
                 if (uri && History.match(viewPath, uri)) {
-                    // handle back button
-                    listView.currentIndex = i
-
-                    // handle keyboard navigation
-                    if (!navigationModel.data(rowIndex, NavigationModel.EXPANDED))
-                        navigationModel.setData(rowIndex, true, NavigationModel.EXPANDED)
-
-                    return
+                    // Prefer a direct rail shortcut over its broader parent category.
+                    const score = uri.length * 10
+                        + (navigationModel.data(rowIndex, NavigationModel.DEPTH) === 0 ? 1 : 0)
+                    if (score > bestScore) { bestScore = score; bestRow = i }
                 }
             }
+            if (bestRow < 0) return
+            listView.currentIndex = bestRow
+            const rowIndex = navigationModel.index(bestRow, 0)
+            if (navigationModel.data(rowIndex, NavigationModel.EXPANDABLE)
+                    && !navigationModel.data(rowIndex, NavigationModel.EXPANDED))
+                navigationModel.setData(rowIndex, true, NavigationModel.EXPANDED)
         }
     }
 
-    background: Widgets.AcrylicBackground {
-        enabled: root.useAcrylic
-        tintColor: theme.bg.primary
+    readonly property ColorContext surfaceTheme: ColorContext { colorSet: ColorContext.View }
+
+    background: Rectangle {
+        color: root.delegateShowText ? root.surfaceTheme.bg.primary : theme.bg.secondary
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: MainCtx.dp(8)
+            visible: root.delegateShowText
+            radius: MainCtx.dp(6)
+            color: theme.bg.secondary
+        }
     }
 
     contentItem:  Item {
@@ -142,7 +155,8 @@ T.Pane {
                 onCurrentIndexChanged: {
                     const rowIndex = navigationModel.index(currentIndex, 0)
 
-                    if (rowIndex.valid && !navigationModel.data(rowIndex, NavigationModel.EXPANDED)
+                    if (rowIndex.valid && navigationModel.data(rowIndex, NavigationModel.EXPANDABLE)
+                            && !navigationModel.data(rowIndex, NavigationModel.EXPANDED)
                             && History.match(History.viewPath, navigationModel.data(rowIndex, NavigationModel.URI)))
                         navigationModel.setData(rowIndex, true, NavigationModel.EXPANDED)
                 }
@@ -163,15 +177,30 @@ T.Pane {
                     width: ListView.view.contentWidth
                     height: preferredHeight
 
-                    property real preferredHeight: shouldShow ? VLCStyle.buttonHeightNavigationPane : 0.0
+                    property real preferredHeight: shouldShow ? MainCtx.dp(showText && depth > 0 ? 36 : 46) : 0.0
 
-                    leftPadding: root.safeAreaLeftMargin + VLCStyle.margin_xsmall
-                    rightPadding: root.safeAreaRightMargin
+                    leftPadding: root.safeAreaLeftMargin + MainCtx.dp(showText ? 16 : 13)
+                    rightPadding: root.safeAreaRightMargin + MainCtx.dp(showText ? 8 : 13)
+                    topPadding: MainCtx.dp(4)
+                    bottomPadding: MainCtx.dp(showText && depth > 0 ? 8 : 18)
 
-                    leftInset: root.safeAreaLeftMargin + implicitLeftInset
-                    rightInset: root.safeAreaRightMargin + implicitRightInset
+                    leftInset: root.safeAreaLeftMargin + MainCtx.dp(showText ? 4 : 9)
+                    rightInset: root.safeAreaRightMargin + MainCtx.dp(showText ? 4 : 9)
+                    topInset: 0
+                    bottomInset: MainCtx.dp(showText && depth > 0 ? 0 : 14)
 
                     iconTxt: icon_alias
+                    // Original category exports from the owner's Figma library.
+                    iconSource: {
+                        if (depth !== 0 || !uri || uri.length === 0)
+                            return ""
+                        const icons = {home: "home", video: "videos", music: "music", network: "network", recent: "recent"}
+                        const name = uri[0] === "video" && uri[1] === "playlists"
+                            ? "playlists" : icons[uri[0]]
+                        return name ? "qrc:/redesign/icons/" + name + ".svg" : ""
+                    }
+                    mirrorIcon: depth === 0 && uri && ["home", "music", "network", "recent"].includes(uri[0])
+                        && uri[1] !== "playlists"
                     text: title
 
                     showText: root.delegateShowText
@@ -195,10 +224,9 @@ T.Pane {
                             heightBehavior.enabled = true // At this point, it can keep being enabled for good.
                     }
 
-                    Binding on highlighted {
-                        when: !!uri && History.match(History.viewPath, uri)
-                        value: true
-                    }
+                    highlighted: !!uri && History.match(History.viewPath, uri)
+                        && !(depth === 0 && uri[0] === "video" && uri.length === 1
+                             && History.viewPath[1] === "playlists")
                     checked: (!showText || !expanded) && highlighted
 
                     onClicked: {
@@ -230,6 +258,59 @@ T.Pane {
                             heightBehavior.enabled = true
                             delegate.height = Qt.binding(() => delegate.preferredHeight)
                             heightBehavior.enabled = false
+                        }
+                    }
+                }
+
+                footer: Loader {
+                    width: listView.width
+                    active: MainCtx.mediaLibraryAvailable && LibraryPins.model.count > 0
+                    visible: active
+                    sourceComponent: Column {
+                        width: parent.width
+                        Repeater {
+                            model: LibraryPins.model
+                            delegate: SideNavigationDelegate {
+                                id: pinDelegate
+                                required property var model
+                                readonly property bool expandable: false
+                                width: parent.width
+                                height: MainCtx.dp(showText ? 42 : 46)
+                                showText: root.delegateShowText
+                                text: model.title
+                                iconSource: "qrc:/redesign/icons/"
+                                    + (model.kind === "folder" ? "folder" : model.kind === "playlist"
+                                       ? "playlists" : ["album", "artist", "genre"].includes(model.kind)
+                                       ? "music" : "videos") + ".svg"
+                                mirrorIcon: model.kind === "folder" || ["album", "artist", "genre"].includes(model.kind)
+                                leftPadding: MainCtx.dp(showText ? 12 : 13)
+                                rightPadding: MainCtx.dp(showText ? 32 : 13)
+                                topPadding: MainCtx.dp(showText ? 8 : 4)
+                                bottomPadding: MainCtx.dp(showText ? 8 : 18)
+                                leftInset: MainCtx.dp(showText ? 4 : 9)
+                                rightInset: MainCtx.dp(showText ? 4 : 9)
+                                topInset: 0
+                                bottomInset: MainCtx.dp(showText ? 0 : 14)
+                                focusPolicy: Qt.StrongFocus
+                                onClicked: {
+                                    const destination = LibraryPins.route(model)
+                                    if (destination) root.pinRequested(destination.path, destination.properties)
+                                    else MediaLib.addAndPlay(model.mediaId)
+                                }
+                                Keys.onDeletePressed: LibraryPins.toggle(model.mediaId)
+                                Widgets.IconToolButton {
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: MainCtx.dp(6)
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: MainCtx.dp(24)
+                                    height: width
+                                    visible: pinDelegate.showText && (pinDelegate.hovered || pinDelegate.activeFocus || hovered || activeFocus)
+                                    description: qsTr("Unpin")
+                                    text: VLCIcons.close
+                                    iconSource: "qrc:/redesign/icons/remove.svg"
+                                    onClicked: LibraryPins.toggle(pinDelegate.model.mediaId)
+                                }
+                            }
                         }
                     }
                 }
@@ -265,15 +346,20 @@ T.Pane {
                 AccessibleCompat.id: "preferencesButton"
 
                 Layout.fillWidth: true
-                Layout.preferredHeight: VLCStyle.buttonHeightNavigationPane
+                Layout.preferredHeight: MainCtx.dp(32)
 
-                leftPadding: root.safeAreaLeftMargin + VLCStyle.margin_xsmall
-                rightPadding: root.safeAreaRightMargin
+                leftPadding: root.safeAreaLeftMargin + MainCtx.dp(showText ? 12 : 13)
+                rightPadding: root.safeAreaRightMargin + MainCtx.dp(showText ? 8 : 13)
+                topPadding: MainCtx.dp(4)
+                bottomPadding: MainCtx.dp(4)
 
-                leftInset: root.safeAreaLeftMargin + implicitLeftInset
-                rightInset: root.safeAreaRightMargin + implicitRightInset
+                leftInset: root.safeAreaLeftMargin + MainCtx.dp(showText ? 4 : 9)
+                rightInset: root.safeAreaRightMargin + MainCtx.dp(showText ? 4 : 9)
+                topInset: 0
+                bottomInset: 0
 
                 iconTxt: VLCIcons.settings
+                iconSource: "qrc:/redesign/icons/menu-settings.svg"
                 text: qsTr("Preferences")
 
                 checked: DialogsProvider.prefsDialogVisible

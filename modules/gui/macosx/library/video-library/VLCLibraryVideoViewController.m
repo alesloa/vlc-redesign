@@ -181,11 +181,11 @@
 {
     _collectionViewLayout = [[VLCLibraryCollectionViewFlowLayout alloc] init];
 
-    const CGFloat collectionItemSpacing = VLCUIUnits.collectionViewItemSpacing;
     const NSEdgeInsets collectionViewSectionInset = VLCUIUnits.collectionViewSectionInsets;
     _collectionViewLayout.headerReferenceSize = VLCLibraryCollectionViewSupplementaryElementView.defaultHeaderSize;
-    _collectionViewLayout.minimumLineSpacing = collectionItemSpacing;
-    _collectionViewLayout.minimumInteritemSpacing = collectionItemSpacing;
+    // Figma Library970:2703 uses 40px row spacing and 20px between cards.
+    _collectionViewLayout.minimumLineSpacing = 40;
+    _collectionViewLayout.minimumInteritemSpacing = 20;
     _collectionViewLayout.sectionInset = collectionViewSectionInset;
 
     NSCollectionView * const collectionView = self.videoLibraryCollectionView;
@@ -284,7 +284,7 @@
 - (id<VLCLibraryDataSource>)currentDataSource
 {
     const NSInteger librarySegmentType = self.libraryWindow.librarySegmentType;
-    if (librarySegmentType == VLCLibraryVideoSegmentType) {
+    if (librarySegmentType == VLCLibraryVideoSegmentType || librarySegmentType == VLCLibraryRecentSegmentType) {
         return self.libraryVideoDataSource;
     } else if (librarySegmentType == VLCLibraryShowsVideoSubSegmentType) {
         return self.libraryShowsDataSource;
@@ -307,6 +307,8 @@
     if (_libraryVideoDataSource == nil) {
         [self setupVideoDataSource];
     }
+    BOOL recent = self.libraryWindow.librarySegmentType == VLCLibraryRecentSegmentType;
+    self.libraryVideoDataSource.recentOnly = recent;
     self.videoLibraryCollectionView.dataSource = self.libraryVideoDataSource;
 
     self.videoLibraryGroupSelectionTableView.dataSource = self.libraryVideoDataSource;
@@ -315,9 +317,9 @@
 
     [self.libraryVideoDataSource reloadData];
 
-    const BOOL anyVideoMedia = self.libraryVideoDataSource.libraryModel.numberOfVideoMedia > 0;
+    const BOOL anyVideoMedia = recent || self.libraryVideoDataSource.libraryModel.numberOfVideoMedia > 0;
     if (anyVideoMedia) {
-        const VLCLibraryViewModeSegment viewModeSegment = VLCLibraryWindowPersistentPreferences.sharedInstance.videoLibraryViewMode;
+        const VLCLibraryViewModeSegment viewModeSegment = recent ? VLCLibraryWindowPersistentPreferences.sharedInstance.recentLibraryViewMode : VLCLibraryWindowPersistentPreferences.sharedInstance.videoLibraryViewMode;
         [self presentVideoLibraryView:viewModeSegment];
     } else if (self.libraryVideoDataSource.libraryModel.filterString.length > 0) {
         [self.libraryWindow displayNoResultsMessage];
@@ -360,6 +362,11 @@
 }
 
 - (void)presentVideoView
+{
+    [self updatePresentedVideoLibraryView];
+}
+
+- (void)presentRecentView
 {
     [self updatePresentedVideoLibraryView];
 }

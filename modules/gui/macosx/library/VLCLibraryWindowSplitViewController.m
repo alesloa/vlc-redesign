@@ -72,9 +72,10 @@
         _navSidebarItem.allowsFullHeightLayout = YES;
     }
 
-    _navSidebarItem.preferredThicknessFraction = 0.2;
-    _navSidebarItem.minimumThickness = VLCUIUnits.libraryWindowNavSidebarMinWidth;
-    _navSidebarItem.maximumThickness = VLCUIUnits.libraryWindowNavSidebarMaxWidth;
+    // Figma 970:2703 uses a 217px navigation column.
+    _navSidebarItem.preferredThicknessFraction = 217. / MAX(1, libraryWindow.contentView.bounds.size.width);
+    _navSidebarItem.minimumThickness = 217.;
+    _navSidebarItem.maximumThickness = 217.;
 
     self.multifunctionSidebarItem.preferredThicknessFraction = 0.2;
     self.multifunctionSidebarItem.maximumThickness =

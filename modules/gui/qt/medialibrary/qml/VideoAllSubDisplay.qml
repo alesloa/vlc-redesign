@@ -70,6 +70,13 @@ Widgets.PageExt {
 
     title: qsTr("Videos")
 
+    // Collection loaders support title/duration; watched and insertion ordering
+    // apply to the actual videos rather than silently using default grouping.
+    sortModel: MainCtx.grouping === MainCtx.GROUPING_NONE ? videoAll.sortModel : [
+        { text: qsTr("Alphabetic"), criteria: "title" },
+        { text: qsTr("Duration"), criteria: "duration" }
+    ]
+
     VideoAll {
         id: videoAll
 

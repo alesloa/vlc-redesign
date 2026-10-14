@@ -852,13 +852,11 @@ NSArray<NSString *> *defaultBookmarkedLocations()
 
         const VLCLibrarySegmentType segmentType = VLCLibraryBrowseBookmarkedLocationSubSegmentType;
         NSMutableArray<NSTreeNode *> * const bookmarkedLocationNodes = NSMutableArray.array;
-        NSMutableArray<NSString *> * const remainingBookmarkedLocations = bookmarkedLocations.mutableCopy;
-
         for (NSString * const locationMrl in bookmarkedLocations) {
-            if (![NSFileManager.defaultManager fileExistsAtPath:[NSURL URLWithString:locationMrl].path]) {
-                [remainingBookmarkedLocations removeObject:locationMrl];
-                continue;
-            }
+            // A stored owner-selected URL is sufficient to render a shortcut.
+            // Do not block sidebar construction on a remote/unmounted volume,
+            // or erase its bookmark because a synchronous existence check fails.
+            if ([NSURL URLWithString:locationMrl] == nil) continue;
             NSString * const locationName = [locationMrl.lastPathComponent stringByRemovingPercentEncoding];
             VLCLibrarySegmentBookmarkedLocation * const descriptor =
                 [[VLCLibrarySegmentBookmarkedLocation alloc] initWithSegmentType:segmentType
@@ -871,9 +869,6 @@ NSArray<NSString *> *defaultBookmarkedLocations()
 
         self.internalChildNodes = bookmarkedLocationNodes.copy;
 
-        if (bookmarkedLocations.count != remainingBookmarkedLocations.count) {
-            [defaults setObject:remainingBookmarkedLocations forKey:VLCLibraryBookmarkedLocationsKey];
-        }
     }
     return self;
 }
@@ -890,7 +885,8 @@ NSArray<NSString *> *defaultBookmarkedLocations()
 {
     self = [super initWithSegmentType:VLCLibraryStreamsSegmentType];
     if (self) {
-        self.internalDisplayString = _NS("Streams");
+        // Figma970:2703 Network invokes the original Internet media sources.
+        self.internalDisplayString = _NS("Network");
         self.internalSearchFieldPlaceholder = _NS("Search your streams");
         if (@available(macOS 11.0, *)) {
             self.internalDisplayImage =
@@ -922,7 +918,65 @@ NSArray<NSString *> *defaultBookmarkedLocations()
 
 // MARK: - VLCLibrarySegment
 
+@interface VLCLibraryRecentSegment : VLCLibrarySegment
+@end
+@implementation VLCLibraryRecentSegment
+- (instancetype)init
+{
+    self=[super initWithSegmentType:VLCLibraryRecentSegmentType];
+    if(self) {
+        // Figma970:2703 labels this existing-history entry Recent.
+        self.internalDisplayString=_NS("Recent");
+        self.internalMediaLibraryRequired=YES;
+        self.internalLibraryViewControllerClass=VLCLibraryVideoViewController.class;
+        self.internalLibraryViewControllerCreator=^{ return [[VLCLibraryVideoViewController alloc] initWithLibraryWindow:VLCMain.sharedInstance.libraryWindow]; };
+        self.internalLibraryViewPresenter=^(VLCLibraryAbstractSegmentViewController *controller){ [(VLCLibraryVideoViewController *)controller presentRecentView]; };
+        self.internalGetViewModePreference=^{return VLCLibraryWindowPersistentPreferences.sharedInstance.recentLibraryViewMode;};
+        self.internalSaveViewModePreference=^(NSInteger value){VLCLibraryWindowPersistentPreferences.sharedInstance.recentLibraryViewMode=value;};
+        self.internalToolbarDisplayFlags=VLCLibraryWindowToolbarDisplayFlagLibrarySearchBar|VLCLibraryWindowToolbarDisplayFlagToggleViewModeSegmentButton;
+    }
+    return self;
+}
+@end
+
+@interface VLCLibraryPinnedSegment : VLCLibrarySegment
+@property NSDictionary *entry;
+@end
+@implementation VLCLibraryPinnedSegment
+- (id)representedObject { return self.entry ?: [super representedObject]; }
+- (NSImage *)displayImage
+{
+    NSImage *image = [NSImage vlc_redesignImageNamed:self.entry[@"icon"]];
+    image.size = NSMakeSize(24, 24);
+    return image ?: [super displayImage];
+}
+@end
+
 @implementation VLCLibrarySegment
+
++ (instancetype)pinsHeaderSegment
+{
+    // Heading copy comes from the Figma full library navigation.
+    return [[VLCLibraryHeaderSegment alloc] initWithDisplayString:_NS("Pins")];
+}
++ (instancetype)segmentForPinnedEntry:(NSDictionary *)entry
+{
+    id item = entry[@"item"];
+    VLCLibrarySegment *segment = [item isKindOfClass:NSURL.class]
+        ? [self segmentWithSegmentType:VLCLibraryBrowseSegmentType]
+        : [item isKindOfClass:VLCMediaLibraryPlaylist.class]
+            ? [self segmentWithSegmentType:VLCLibraryPlaylistsSegmentType]
+            : [self segmentForLibraryItem:item];
+    if (segment == nil) segment = [self segmentWithSegmentType:VLCLibraryRecentSegmentType];
+    // The existing segment-type initializer constructs a base tree node. Keep
+    // this node's subclass so its source-backed pin entry remains available.
+    VLCLibraryPinnedSegment *pin = [[VLCLibraryPinnedSegment alloc] initWithRepresentedObject:@(segment.segmentType)];
+    pin.entry = entry;
+    pin.internalDisplayString = entry[@"title"];
+    pin.internalChildNodes = @[];
+    pin.internalMediaLibraryRequired = YES;
+    return pin;
+}
 
 + (NSArray<VLCLibrarySegment *> *)librarySegments
 {
@@ -931,11 +985,13 @@ NSArray<NSString *> *defaultBookmarkedLocations()
     if (VLCMain.sharedInstance.libraryController.shouldUseMediaLibrary) {
         [segments addObjectsFromArray:@[
             [[VLCLibraryHomeSegment alloc] init],
-            [[VLCLibraryHeaderSegment alloc] initWithDisplayString:_NS("Library")],
-            [[VLCLibraryFavoritesSegment alloc] init],
             [[VLCLibraryVideoSegment alloc] init],
             [[VLCLibraryMusicSegment alloc] init],
+            [[VLCLibraryStreamsSegment alloc] init],
             [[VLCLibraryPlaylistSegment alloc] init],
+            [[VLCLibraryRecentSegment alloc] init],
+            [[VLCLibraryHeaderSegment alloc] initWithDisplayString:_NS("Library")],
+            [[VLCLibraryFavoritesSegment alloc] init],
             [[VLCLibraryGroupSegment alloc] init]
         ]];
     }
@@ -943,8 +999,8 @@ NSArray<NSString *> *defaultBookmarkedLocations()
     [segments addObjectsFromArray:@[
         [[VLCLibraryHeaderSegment alloc] initWithDisplayString:_NS("Explore")],
         [[VLCLibraryBrowseSegment alloc] init],
-        [[VLCLibraryStreamsSegment alloc] init],
     ]];
+    if(!VLCMain.sharedInstance.libraryController.shouldUseMediaLibrary) [segments addObject:[[VLCLibraryStreamsSegment alloc] init]];
 
     return segments.copy;
 }
@@ -954,6 +1010,8 @@ NSArray<NSString *> *defaultBookmarkedLocations()
     switch (segmentType) {
         case VLCLibraryHomeSegmentType:
             return [[VLCLibraryHomeSegment alloc] init];
+        case VLCLibraryRecentSegmentType:
+            return [[VLCLibraryRecentSegment alloc] init];
         case VLCLibraryFavoritesSegmentType:
             return [[VLCLibraryFavoritesSegment alloc] init];
         case VLCLibraryVideoSegmentType:
@@ -991,7 +1049,9 @@ NSArray<NSString *> *defaultBookmarkedLocations()
 
 + (instancetype)segmentForLibraryItem:(id<VLCMediaLibraryItemProtocol>)libraryItem
 {
-    if ([libraryItem isKindOfClass:VLCMediaLibraryAlbum.class]) {
+    if ([libraryItem isKindOfClass:VLCMediaLibraryPlaylist.class]) {
+        return [VLCLibrarySegment segmentWithSegmentType:VLCLibraryPlaylistsSegmentType];
+    } else if ([libraryItem isKindOfClass:VLCMediaLibraryAlbum.class]) {
         return [VLCLibrarySegment segmentWithSegmentType:VLCLibraryAlbumsMusicSubSegmentType];
     } else if ([libraryItem isKindOfClass:VLCMediaLibraryArtist.class]) {
         return [VLCLibrarySegment segmentWithSegmentType:VLCLibraryArtistsMusicSubSegmentType];
@@ -1002,7 +1062,7 @@ NSArray<NSString *> *defaultBookmarkedLocations()
     }
 
     VLCMediaLibraryMediaItem * const mediaItem = (VLCMediaLibraryMediaItem *)libraryItem;
-    const BOOL validMediaItem = mediaItem != nil;
+    const BOOL validMediaItem = [mediaItem isKindOfClass:VLCMediaLibraryMediaItem.class];
     if (validMediaItem && mediaItem.mediaType == VLC_ML_MEDIA_TYPE_AUDIO) {
         return [VLCLibrarySegment segmentWithSegmentType:VLCLibraryMusicSegmentType];
     } else if (validMediaItem && mediaItem.mediaType == VLC_ML_MEDIA_TYPE_VIDEO) {
@@ -1071,6 +1131,21 @@ NSArray<NSString *> *defaultBookmarkedLocations()
 
 - (NSImage *)displayImage
 {
+    // Exact exported Figma navigation icons; segment labels and content remain source-backed.
+    NSString *name = nil;
+    switch (self.segmentType) {
+        case VLCLibraryHomeSegmentType: name = @"home"; break;
+        case VLCLibraryVideoSegmentType: name = @"videos"; break;
+        case VLCLibraryMusicSegmentType: name = @"music"; break;
+        case VLCLibraryPlaylistsSegmentType: name = @"playlists"; break;
+        case VLCLibraryStreamsSegmentType: name = @"network"; break;
+        case VLCLibraryRecentSegmentType: name = @"recent"; break;
+        case VLCLibraryBrowseSegmentType: name = @"folder"; break;
+        case VLCLibraryBrowseBookmarkedLocationSubSegmentType: name = @"folder"; break;
+        default: break;
+    }
+    NSImage *image = name ? [NSImage vlc_redesignImageNamed:name] : nil;
+    if (image) { image.size = NSMakeSize(24, 24); return image; }
     return self.internalDisplayImage;
 }
 
