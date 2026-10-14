@@ -117,12 +117,12 @@
         <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
         <window title="Video Effects" allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" hidesOnDeactivate="YES" releasedWhenClosed="NO" visibleAtLaunch="NO" frameAutosaveName="videoeffects" animationBehavior="default" id="1" customClass="NSPanel">
-            <windowStyleMask key="styleMask" titled="YES" closable="YES" utility="YES" HUD="YES"/>
+            <windowStyleMask key="styleMask" titled="YES" closable="YES" utility="YES"/>
             <windowPositionMask key="initialPositionMask" leftStrut="YES" rightStrut="YES" topStrut="YES" bottomStrut="YES"/>
-            <rect key="contentRect" x="196" y="236" width="755" height="293"/>
+            <rect key="contentRect" x="196" y="236" width="755" height="317"/>
             <rect key="screenRect" x="0.0" y="0.0" width="1280" height="778"/>
             <view key="contentView" id="2">
-                <rect key="frame" x="0.0" y="0.0" width="755" height="293"/>
+                <rect key="frame" x="0.0" y="0.0" width="755" height="317"/>
                 <autoresizingMask key="autoresizingMask"/>
                 <subviews>
                     <segmentedControl verticalHuggingPriority="750" misplaced="YES" translatesAutoresizingMaskIntoConstraints="NO" id="PmS-HT-UdA">
@@ -204,13 +204,10 @@
                                                     </slider>
                                                     <button mirrorLayoutDirectionWhenInternationalizing="always" misplaced="YES" translatesAutoresizingMaskIntoConstraints="NO" id="46">
                                                         <rect key="frame" x="175" y="75" width="134" height="18"/>
-                                                        <buttonCell key="cell" type="check" title="Brightness Threshold" bezelStyle="regularSquare" imagePosition="left" alignment="left" controlSize="small" inset="2" id="47">
+                                                        <buttonCell key="cell" type="check" title="Brightness Threshold" bezelStyle="regularSquare" imagePosition="left" alignment="left" controlSize="small" enabled="NO" inset="2" id="47">
                                                             <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
                                                             <font key="font" metaFont="smallSystem"/>
                                                         </buttonCell>
-                                                        <connections>
-                                                            <action selector="enableAdjustBrightnessThreshold:" target="-2" id="9OQ-2E-4Ii"/>
-                                                        </connections>
                                                     </button>
                                                     <textField horizontalHuggingPriority="249" verticalHuggingPriority="750" misplaced="YES" translatesAutoresizingMaskIntoConstraints="NO" id="23">
                                                         <rect key="frame" x="15" y="96" width="155" height="14"/>
@@ -319,6 +316,7 @@
                                                         </userDefinedRuntimeAttributes>
                                                     </constraint>
                                                     <constraint firstItem="704" firstAttribute="trailing" secondItem="27" secondAttribute="trailing" id="m4o-gm-JZO"/>
+                                                    <constraint firstAttribute="bottom" secondItem="704" secondAttribute="bottom" constant="12" id="VLC-VideoAdjust-ResetBottom"/>
                                                     <constraint firstItem="21" firstAttribute="centerY" secondItem="27" secondAttribute="centerY" constant="-1.5" id="mUN-p9-OSr"/>
                                                     <constraint firstItem="22" firstAttribute="leading" secondItem="23" secondAttribute="leading" id="uac-H8-N26"/>
                                                     <constraint firstItem="30" firstAttribute="leading" secondItem="24" secondAttribute="trailing" constant="8" id="vR4-97-ZZ2" customClass="VLCSpacingConstraint">
@@ -510,7 +508,6 @@
                                             </userDefinedRuntimeAttributes>
                                         </constraint>
                                         <constraint firstItem="61" firstAttribute="leading" secondItem="68" secondAttribute="leading" id="6tO-Iz-9Jz"/>
-                                        <constraint firstItem="68" firstAttribute="bottom" secondItem="48" secondAttribute="bottom" id="87I-aT-eFR"/>
                                         <constraint firstItem="68" firstAttribute="top" secondItem="61" secondAttribute="bottom" constant="26" id="8lO-Le-23z"/>
                                         <constraint firstItem="48" firstAttribute="leading" secondItem="7" secondAttribute="leading" constant="11" id="A2m-nH-bfJ"/>
                                         <constraint firstItem="57" firstAttribute="leading" secondItem="48" secondAttribute="trailing" constant="8" id="AgC-b4-0BD" customClass="VLCSpacingConstraint">
@@ -970,10 +967,11 @@
                                                     <constraint firstItem="140" firstAttribute="leading" secondItem="138" secondAttribute="trailing" constant="7" id="pbZ-3L-b7G"/>
                                                     <constraint firstItem="145" firstAttribute="leading" secondItem="144" secondAttribute="trailing" constant="7" id="rBz-lF-idR"/>
                                                     <constraint firstItem="142" firstAttribute="centerY" secondItem="138" secondAttribute="centerY" id="zAk-4d-5KI"/>
+                                                    <constraint firstAttribute="bottom" secondItem="144" secondAttribute="bottom" constant="12" id="VLC-Puzzle-ColumnsBottom"/>
                                                 </constraints>
                                             </view>
                                             <constraints>
-                                                <constraint firstAttribute="height" constant="68" id="Tye-1d-Cbu"/>
+                                                <constraint firstAttribute="height" constant="82" id="Tye-1d-Cbu"/>
                                             </constraints>
                                         </box>
                                         <button mirrorLayoutDirectionWhenInternationalizing="always" translatesAutoresizingMaskIntoConstraints="NO" id="754">
@@ -1068,7 +1066,7 @@
                                                 </subviews>
                                                 <constraints>
                                                     <constraint firstItem="761" firstAttribute="trailing" secondItem="758" secondAttribute="trailing" id="1Gj-ON-vqt"/>
-                                                    <constraint firstItem="756" firstAttribute="top" secondItem="759" secondAttribute="bottom" constant="13" id="1YA-ZJ-DER"/>
+                                                    <constraint firstItem="759" firstAttribute="centerY" secondItem="761" secondAttribute="centerY" id="1YA-ZJ-DER"/>
                                                     <constraint firstItem="757" firstAttribute="centerX" secondItem="760" secondAttribute="centerX" id="1dt-Ok-ezz"/>
                                                     <constraint firstItem="761" firstAttribute="top" secondItem="ne3-lY-k8h" secondAttribute="top" constant="12" id="7C4-lu-pzk"/>
                                                     <constraint firstItem="757" firstAttribute="top" secondItem="760" secondAttribute="bottom" constant="8" id="9Nj-v2-v3c" customClass="VLCSpacingConstraint">
@@ -1101,10 +1099,11 @@
                                                             </userDefinedRuntimeAttribute>
                                                         </userDefinedRuntimeAttributes>
                                                     </constraint>
+                                                    <constraint firstAttribute="bottom" secondItem="758" secondAttribute="bottom" constant="12" id="VLC-Wall-ColumnsBottom"/>
                                                 </constraints>
                                             </view>
                                             <constraints>
-                                                <constraint firstAttribute="height" constant="68" id="7R4-fo-zhd"/>
+                                                <constraint firstAttribute="height" constant="80" id="7R4-fo-zhd"/>
                                             </constraints>
                                         </box>
                                         <button mirrorLayoutDirectionWhenInternationalizing="always" translatesAutoresizingMaskIntoConstraints="NO" id="729">
@@ -2056,10 +2055,11 @@
                                                     <constraint firstItem="692" firstAttribute="top" secondItem="646" secondAttribute="bottom" constant="9" id="wCw-F0-KBT"/>
                                                     <constraint firstItem="652" firstAttribute="centerY" secondItem="646" secondAttribute="centerY" id="xYA-cQ-ZT2"/>
                                                     <constraint firstItem="692" firstAttribute="leading" secondItem="645" secondAttribute="leading" id="zyt-qT-E0M"/>
+                                                    <constraint firstAttribute="bottom" secondItem="649" secondAttribute="bottom" constant="12" id="VLC-Logo-TransparencyBottom"/>
                                                 </constraints>
                                             </view>
                                             <constraints>
-                                                <constraint firstAttribute="height" constant="89" id="OSq-57-c2a"/>
+                                                <constraint firstAttribute="height" constant="103" id="OSq-57-c2a"/>
                                             </constraints>
                                         </box>
                                         <button mirrorLayoutDirectionWhenInternationalizing="always" translatesAutoresizingMaskIntoConstraints="NO" id="708">

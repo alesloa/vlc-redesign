@@ -26,13 +26,14 @@
 #import "coreinteraction/VLCVideoFilterHelper.h"
 #import "extensions/VLCHexNumberFormatter.h"
 #import "extensions/NSString+Helpers.h"
+#import "extensions/NSView+VLCAdditions.h"
+#import "extensions/NSWindow+VLCAdditions.h"
 #import "main/VLCMain.h"
 #import "panels/dialogs/VLCPopupPanelController.h"
 #import "panels/dialogs/VLCTextfieldPanelController.h"
 #import "playqueue/VLCPlayQueueController.h"
 #import "playqueue/VLCPlayerController.h"
 #import "windows/video/VLCVideoOutputProvider.h"
-#import "views/VLCPlayerEffectsView.h"
 
 #import <vlc_configuration.h>
 
@@ -101,8 +102,6 @@ static NSString * const VLCVideoEffectsDefaultProfileString = @";;;0;1.000000;1.
 {
     VLCPopupPanelController *_popupPanel;
     VLCTextfieldPanelController *_textfieldPanel;
-    NSView *_legacyEffectsContent;
-    VLCPlayerEffectsView *_redesignEffectsView;
 }
 @end
 
@@ -406,11 +405,12 @@ static NSString * const VLCVideoEffectsDefaultProfileString = @";;;0;1.000000;1.
     [_addLogoTransparencyLabel setStringValue:_NS("Transparency")];
 
     [self resetValues];
-    // Keep original nib controls alive for bindings, sender identity, profile
-    // dialogs and the original effects callbacks.
-    _legacyEffectsContent = self.window.contentView;
-    _redesignEffectsView = [[VLCPlayerEffectsView alloc] initWithEffectsController:self audio:NO includeProfileControls:YES];
-    [_redesignEffectsView installInWindow:self.window];
+    // Standalone effects keep the nib's compact tabs and original controls.
+    // Player popovers create their own card presentation independently.
+    // Override the former tall card window's saved size; the extra 24 points
+    // give Image Adjust's Reset button room below the brightness threshold row.
+    [self.window setContentSize:NSMakeSize(755., 317.)];
+    [self.window vlc_applyOpaqueRedesignSurface];
 }
 
 - (void)dealloc
@@ -862,7 +862,6 @@ static NSString * const VLCVideoEffectsDefaultProfileString = @";;;0;1.000000;1.
         [self.window orderOut:sender];
     else {
         [self refreshCurrentValues];
-        [_redesignEffectsView refreshControls];
         [self.window setLevel: VLCMain.sharedInstance.voutProvider.currentStatusWindowLevel];
         [self.window makeKeyAndOrderFront:sender];
     }

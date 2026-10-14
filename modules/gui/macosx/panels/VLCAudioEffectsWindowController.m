@@ -38,7 +38,7 @@
 
 #import "extensions/NSString+Helpers.h"
 #import "extensions/NSView+VLCAdditions.h"
-#import "views/VLCPlayerEffectsView.h"
+#import "extensions/NSWindow+VLCAdditions.h"
 #import "main/VLCMain.h"
 #import "main/CompatibilityFixes.h"
 #import "panels/dialogs/VLCPopupPanelController.h"
@@ -57,6 +57,7 @@ NSString *VLCAudioEffectsProfileNamesKey = @"AudioEffectProfileNames";
 static inline void enableTextField(NSTextField *const __unsafe_unretained textField,
                                    const BOOL enable)
 {
+    [textField setEnabled:enable];
     [textField setTextColor:enable ? [NSColor controlTextColor] : [NSColor disabledControlTextColor]];
 }
 
@@ -65,8 +66,6 @@ static inline void enableTextField(NSTextField *const __unsafe_unretained textFi
     VLCPlayerController *_playerController;
     VLCPopupPanelController *_popupPanel;
     VLCTextfieldPanelController *_textfieldPanel;
-    NSView *_legacyEffectsContent;
-    VLCPlayerEffectsView *_redesignEffectsView;
 }
 @end
 
@@ -320,11 +319,12 @@ static inline void enableTextField(NSTextField *const __unsafe_unretained textFi
     [self resetAudioFilters];
     [self resetProfileSelector];
     [self resetAdvanced];
-    // Retain the original nib tree: its outlets and action sender identities
-    // remain the authoritative effects controls behind the new presentation.
-    _legacyEffectsContent = self.window.contentView;
-    _redesignEffectsView = [[VLCPlayerEffectsView alloc] initWithEffectsController:self audio:YES includeProfileControls:YES];
-    [_redesignEffectsView installInWindow:self.window];
+    // The standalone dialog keeps AudioEffects.xib's compact tabbed layout,
+    // including its vertical equalizer and original action sender identities.
+    // Player popovers create their own VLCPlayerEffectsView independently.
+    // Reset the former tall card window's saved size to the nib's content size.
+    [self.window setContentSize:NSMakeSize(473., 281.)];
+    [self.window vlc_applyOpaqueRedesignSurface];
 }
 
 - (void)dealloc
@@ -397,7 +397,6 @@ static inline void enableTextField(NSTextField *const __unsafe_unretained textFi
         [self.window orderOut:sender];
     else {
         [self refreshCurrentValues];
-        [_redesignEffectsView refreshControls];
         [self.window setLevel: VLCMain.sharedInstance.voutProvider.currentStatusWindowLevel];
         [self.window makeKeyAndOrderFront:sender];
     }
