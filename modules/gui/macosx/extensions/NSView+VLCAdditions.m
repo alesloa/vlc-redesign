@@ -106,7 +106,7 @@
             NSFontTraitMask traits = [NSFontManager.sharedFontManager traitsOfFont:field.font];
             field.font = [NSFont vlc_redesignFontOfSize:field.font.pointSize weight:(traits & NSBoldFontMask) ? NSFontWeightSemibold : NSFontWeightRegular];
         }
-        field.textColor = NSColor.VLCControlForegroundColor;
+        field.textColor = field.enabled ? NSColor.VLCControlForegroundColor : NSColor.disabledControlTextColor;
         // Figma fields use the shared B2 input surface; native formatters,
         // editing delegates, focus rings and validation remain unchanged.
         if (field.drawsBackground) field.backgroundColor = NSColor.VLCInputBackgroundColor;
@@ -166,6 +166,12 @@
         }
     }
 
+    if ([self isKindOfClass:NSTabView.class]) {
+        // Unselected native tabs are detached from the visible view tree.
+        // Update them too so switching tabs retains the current theme.
+        for (NSTabViewItem *item in ((NSTabView *)self).tabViewItems)
+            [item.view vlc_applyRedesignStyle];
+    }
     for (NSView *view in self.subviews) {
         [view vlc_applyRedesignStyle];
     }

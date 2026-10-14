@@ -31,6 +31,9 @@ NS_ASSUME_NONNULL_BEGIN
 /** Shared design shell around existing secondary-dialog controls and actions. */
 - (void)vlc_applyRedesignDialogShell;
 
+/** Opaque Settings palette for existing secondary-window content. */
+- (void)vlc_applyOpaqueRedesignSurface;
+
 @end
 
 NS_ASSUME_NONNULL_END

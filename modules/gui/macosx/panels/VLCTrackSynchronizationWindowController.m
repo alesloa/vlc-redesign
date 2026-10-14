@@ -24,6 +24,7 @@
 #import "VLCTrackSynchronizationWindowController.h"
 
 #import "extensions/NSString+Helpers.h"
+#import "extensions/NSWindow+VLCAdditions.h"
 #import "coreinteraction/VLCVideoFilterHelper.h"
 #import "main/VLCMain.h"
 #import "playqueue/VLCPlayQueueController.h"
@@ -119,6 +120,7 @@
     [self.window setCollectionBehavior: NSWindowCollectionBehaviorFullScreenAuxiliary];
 
     [self resetValues:self];
+    [self.window vlc_applyOpaqueRedesignSurface];
 }
 
 - (void)updateCocoaWindowLevel:(NSNotification *)aNotification

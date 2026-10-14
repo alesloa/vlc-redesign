@@ -27,13 +27,63 @@
 #import "NSImage+VLCAdditions.h"
 #import "NSString+Helpers.h"
 
+@interface VLCOpaqueDialogBackgroundView : NSView
+@end
+
+@implementation VLCOpaqueDialogBackgroundView
+- (BOOL)isOpaque { return YES; }
+- (NSView *)hitTest:(NSPoint)point { return nil; }
+- (void)drawRect:(NSRect)dirtyRect
+{
+    // This is the same appearance-aware surface used by Global Settings.
+    [[NSColor.VLCWindowBackgroundColor colorWithAlphaComponent:1.] setFill];
+    NSRectFill(dirtyRect);
+}
+- (void)viewDidChangeEffectiveAppearance
+{
+    [super viewDidChangeEffectiveAppearance];
+    self.needsDisplay = YES;
+    [self.superview vlc_applyRedesignStyle];
+}
+@end
+
 @implementation NSWindow (Helpers)
+
+- (void)vlc_applyOpaqueRedesignSurface
+{
+    self.styleMask &= ~NSWindowStyleMaskHUDWindow;
+    self.opaque = YES;
+    self.alphaValue = 1.;
+    self.titlebarAppearsTransparent = NO;
+    self.backgroundColor = [NSColor.VLCWindowBackgroundColor colorWithAlphaComponent:1.];
+
+    NSView *body = self.contentView;
+    if (!body) return;
+    BOOL hasBackground = NO;
+    for (NSView *view in body.subviews) {
+        if ([view isKindOfClass:VLCOpaqueDialogBackgroundView.class]) {
+            view.needsDisplay = YES;
+            hasBackground = YES;
+            break;
+        }
+    }
+    if (!hasBackground) {
+        VLCOpaqueDialogBackgroundView *background = [[VLCOpaqueDialogBackgroundView alloc] initWithFrame:body.bounds];
+        background.identifier = @"VLCOpaqueDialogBackground";
+        background.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+        [body addSubview:background positioned:NSWindowBelow relativeTo:nil];
+    }
+    [body vlc_applyRedesignStyle];
+}
 
 - (void)vlc_applyRedesignDialogShell
 {
     NSView *body = self.contentView;
-    if (!body || !(self.styleMask & NSWindowStyleMaskTitled) ||
-        [body.identifier isEqualToString:@"VLCRedesignedSecondaryDialog"]) return;
+    if (!body || !(self.styleMask & NSWindowStyleMaskTitled)) return;
+    if ([body.identifier isEqualToString:@"VLCRedesignedSecondaryDialog"]) {
+        [self vlc_applyOpaqueRedesignSurface];
+        return;
+    }
     // Figma settings and secondary dialogs share a 50px title/close header.
     // The caption comes from this existing VLC window; the body keeps all its
     // original outlets, validation, inputs, modal actions and constraints.
@@ -83,6 +133,7 @@
     if (self.contentMinSize.height > 0.) self.contentMinSize = NSMakeSize(self.contentMinSize.width, self.contentMinSize.height + 50.);
     [self setContentSize:root.frame.size];
     [root vlc_applyRedesignStyle];
+    [self vlc_applyOpaqueRedesignSurface];
 }
 
 - (void)vlc_closeRedesignDialog:(id)sender

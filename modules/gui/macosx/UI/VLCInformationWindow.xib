@@ -127,9 +127,6 @@
                                         </textField>
                                         <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="509" customClass="VLCSettingTextField">
                                             <rect key="frame" x="37" y="18" width="416" height="19"/>
-                                            <constraints>
-                                                <constraint firstAttribute="height" constant="19" id="POw-kc-CJg"/>
-                                            </constraints>
                                             <textFieldCell key="cell" controlSize="small" scrollable="YES" lineBreakMode="clipping" selectable="YES" sendsActionOnEndEditing="YES" state="on" borderStyle="bezel" focusRingType="none" drawsBackground="YES" id="512">
                                                 <font key="font" metaFont="message" size="11"/>
                                                 <color key="textColor" white="1" alpha="1" colorSpace="calibratedWhite"/>
@@ -507,7 +504,6 @@
                                             </userDefinedRuntimeAttributes>
                                         </constraint>
                                         <constraint firstItem="439" firstAttribute="top" secondItem="440" secondAttribute="bottom" constant="3" id="71b-yF-M2B"/>
-                                        <constraint firstItem="9jw-Fr-d1M" firstAttribute="bottom" secondItem="486" secondAttribute="bottom" id="77b-m1-E2f"/>
                                         <constraint firstItem="Ken-fu-rsj" firstAttribute="leading" secondItem="441" secondAttribute="trailing" constant="8" id="8CH-DT-qPt" customClass="VLCSpacingConstraint">
                                             <userDefinedRuntimeAttributes>
                                                 <userDefinedRuntimeAttribute type="number" keyPath="spacingToken">
@@ -540,6 +536,7 @@
                                         </constraint>
                                         <constraint firstAttribute="trailing" secondItem="463" secondAttribute="trailing" constant="37" id="CvZ-PW-sQT"/>
                                         <constraint firstItem="476" firstAttribute="width" secondItem="461" secondAttribute="width" id="DI2-7l-jjc"/>
+                                        <constraint firstItem="461" firstAttribute="height" secondItem="463" secondAttribute="height" id="VLC-MediaInfo-GenreHeight"/>
                                         <constraint firstItem="440" firstAttribute="leading" secondItem="439" secondAttribute="leading" id="DKW-vC-4a2"/>
                                         <constraint firstItem="KiB-XA-gnh" firstAttribute="leading" secondItem="cXh-Kb-cBh" secondAttribute="leading" id="E5O-E7-sp2"/>
                                         <constraint firstItem="442" firstAttribute="leading" secondItem="441" secondAttribute="leading" id="F2a-9d-qnp"/>
