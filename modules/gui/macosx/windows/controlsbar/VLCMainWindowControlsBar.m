@@ -76,7 +76,7 @@
         self.bottomBarView.subviews = @[glassEffectView];
         glassEffectView.contentView = self.dropView;
         [glassEffectView applyConstraintsToFillSuperview];
-        glassEffectView.cornerRadius = CGFLOAT_MAX;
+        glassEffectView.cornerRadius = VLCUIUnits.cornerRadius;
         self.bottomBarView.drawBorder = NO;
         self.bottomBarView.clipsToBounds = NO;
 #endif

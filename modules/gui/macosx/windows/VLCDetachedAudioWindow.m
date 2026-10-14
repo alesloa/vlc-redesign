@@ -28,6 +28,7 @@
 #import "library/VLCInputItem.h"
 
 #import "main/VLCMain.h"
+#import "library/VLCLibraryWindow.h"
 
 #import "playqueue/VLCPlayQueueController.h"
 #import "playqueue/VLCPlayerController.h"
@@ -38,47 +39,35 @@
 #import "windows/controlsbar/VLCControlsBarCommon.h"
 
 #import "windows/video/VLCMainVideoViewAudioMediaDecorativeView.h"
+#import "windows/video/VLCMainVideoViewController.h"
+#import "windows/controlsbar/VLCMainVideoViewControlsBar.h"
 #import "windows/video/VLCMainVideoViewOverlayView.h"
-
-@interface VLCDetachedAudioWindow()
-{
-    VLCPlayerController *_playerController;
-}
-@end
 
 @implementation VLCDetachedAudioWindow
 
 - (void)setupAudioDecorativeView
 {
-    _decorativeView = [VLCMainVideoViewAudioMediaDecorativeView fromNibWithOwner:self.contentView];
-    self.decorativeView.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.contentView addSubview:self.decorativeView 
-                      positioned:NSWindowBelow
-                      relativeTo:self.overlayView];
-    [self.decorativeView applyConstraintsToFillSuperview];
+    _decorativeView = self.videoViewController.audioDecorativeView;
 }
 
 - (void)awakeFromNib
 {
+    [super awakeFromNib];
     self.title = @"";
-
-    _playerController = VLCMain.sharedInstance.playQueueController.playerController;
-
-    VLCTrackingView * const trackingView = self.contentView;
-    trackingView.viewToHide = self.overlayView;
-    trackingView.animatesTransition = YES;
-    trackingView.mouseEnteredBlock = ^{
-        self.styleMask |= NSWindowStyleMaskTitled;
-    };
-    trackingView.mouseExitedBlock = ^{
-        self.styleMask &= ~NSWindowStyleMaskTitled;
-    };
-
-    self.overlayView.drawGradientForTopControls = YES;
-    self.overlayView.darkestGradientColor = [NSColor colorWithCalibratedWhite:0.0 alpha:0.8];
-
-    self.bottomBarView.drawBorder = NO;
-
+    // Figma Music4767:23726 uses the same header and54px controls as video.
+    // Reuse their existing actions/state, artwork and source metadata instead
+    // of stacking the legacy detached bar's duplicate title over the artwork.
+    self.titlebarAppearsTransparent = YES;
+    self.videoViewController.displayLibraryControls = NO;
+    NSView * const playerView = self.videoViewController.view;
+    playerView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    self.contentView = playerView;
+    self.controlsBar = self.videoViewController.controlsBar;
+    self.overlayView = self.videoViewController.overlayView;
+    self.bottomBarView = (VLCBottomBarView *)self.videoViewController.bottomBarView;
+    [self setContentSize:VLCMain.sharedInstance.libraryWindow.contentView.bounds.size];
+    self.videoViewController.autohideControls = NO;
+    [self.videoViewController showControls];
     [self setupAudioDecorativeView];
 }
 

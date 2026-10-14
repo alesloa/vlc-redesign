@@ -59,7 +59,7 @@ Repeater {
         Layout.maximumWidth: Layout.fillWidth ? (item ? item.implicitWidth : -1) : -1
 
         Layout.minimumHeight: 0
-        Layout.maximumHeight: Math.min((item && item.implicitHeight <= 0) ? Number.MAX_VALUE : item.implicitHeight, repeater.availableHeight)
+        Layout.maximumHeight: Math.min((!item || item.implicitHeight <= 0) ? Number.MAX_VALUE : item.implicitHeight, repeater.availableHeight)
         Layout.fillHeight: true
 
         Layout.alignment: repeater.alignment
@@ -93,6 +93,10 @@ Repeater {
         }
 
         onLoaded: {
+            const control = PlayerControlbarControls.control(model.id)
+            if (typeof item.audioTracks === "boolean")
+                item.audioTracks = !!control.audioTracks
+
             // control should not request focus if they are not enabled:
             item.focus = Qt.binding(function() { return item.enabled && item.visible })
 

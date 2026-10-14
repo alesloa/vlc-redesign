@@ -57,6 +57,7 @@
 
 - (void)dealloc
 {
+    [_countdownTimer invalidate];
     [NSNotificationCenter.defaultCenter removeObserver:self];
 }
 
@@ -72,6 +73,7 @@
 
 - (void)showWindowWithItem:(VLCInputItem *)inputItem withLastPosition:(NSInteger)pos completionBlock:(CompletionBlock)block
 {
+    [self cancel];
     _inputItem = inputItem;
     _lastPosition = pos;
     _currentResumeTimeout = 10;
@@ -88,6 +90,16 @@
     NSWindow *window = [self window];
     [window setLevel:VLCMain.sharedInstance.voutProvider.currentStatusWindowLevel];
     [window center];
+    // Keep the existing resume prompt close to the active player's controls.
+    NSWindow *playerWindow = NSApp.mainWindow;
+    if (playerWindow != nil && playerWindow != window) {
+        NSRect visibleFrame = playerWindow.screen.visibleFrame;
+        CGFloat x = NSMidX(playerWindow.frame) - window.frame.size.width / 2.;
+        CGFloat y = NSMinY(playerWindow.frame) + 80.;
+        x = MAX(NSMinX(visibleFrame), MIN(x, NSMaxX(visibleFrame) - window.frame.size.width));
+        y = MAX(NSMinY(visibleFrame), MIN(y, NSMaxY(visibleFrame) - window.frame.size.height));
+        [window setFrameOrigin:NSMakePoint(x, y)];
+    }
     [window makeKeyAndOrderFront:nil];
 }
 
@@ -111,8 +123,7 @@
     --_currentResumeTimeout;
     if (_currentResumeTimeout <= 0) {
         [self buttonClicked:_restartButton];
-        [timer invalidate];
-        timer = nil;
+        return;
     }
 
     NSString *buttonLabel = _NS("Restart playback");
@@ -130,12 +141,13 @@
     else if (sender == _resumeButton)
         resumeResult = RESUME_NOW;
 
+    [_countdownTimer invalidate];
+    _countdownTimer = nil;
+    CompletionBlock completion = _completionBlock;
+    _completionBlock = nil;
+    _inputItem = nil;
     [[self window] close];
-
-    if (_completionBlock) {
-        _completionBlock(resumeResult);
-        _completionBlock = nil;
-    }
+    if (completion != nil) completion(resumeResult);
 }
 
 - (IBAction)resumeSettingChanged:(id)sender
@@ -154,15 +166,11 @@
 
 - (void)cancel
 {
-    if (![self isWindowLoaded])
-        return;
-
-    if (_countdownTimer != nil) {
-        [_countdownTimer invalidate];
-        _countdownTimer = nil;
-    }
-
-    [self.window close];
+    [_countdownTimer invalidate];
+    _countdownTimer = nil;
+    _completionBlock = nil;
+    _inputItem = nil;
+    if (self.isWindowLoaded) [self.window close];
 }
 
 @end

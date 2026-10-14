@@ -28,6 +28,7 @@ Widgets.IconToolButton {
     id: playlistBtn
 
     text: VLCIcons.playlist
+    iconSource: "qrc:///redesign/icons/queue.svg"
     onClicked: {
         MainCtx.playqueuePanel.visible = !MainCtx.playqueuePanel.visible
         if (MainCtx.playqueuePanel.visible && MainCtx.playqueuePanel.docked) {

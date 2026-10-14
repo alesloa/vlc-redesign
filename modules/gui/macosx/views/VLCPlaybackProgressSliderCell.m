@@ -147,12 +147,17 @@ static CVReturn DisplayLinkCallback(CVDisplayLinkRef displayLink,
         return;
     }
 
-    [super drawKnob:knobRect];
+    NSRect grip = NSMakeRect(NSMidX(knobRect) - 4., NSMidY(knobRect) - 12., 8., 24.);
+    [NSColor.VLCAccentColor setFill];
+    [[NSBezierPath bezierPathWithRoundedRect:grip xRadius:4. yRadius:4.] fill];
 }
 
 - (void)drawBarInside:(NSRect)rect flipped:(BOOL)flipped
 {
-    static const CGFloat trackBorderRadius = 1;
+    const CGFloat trackHeight = MIN(24., self.controlView.bounds.size.height - 4.);
+    rect.origin.y = NSMidY(rect) - trackHeight / 2.;
+    rect.size.height = trackHeight;
+    static const CGFloat trackBorderRadius = 4;
 
     // Empty Track Drawing
     NSBezierPath * const emptyTrackPath =
@@ -169,7 +174,12 @@ static CVReturn DisplayLinkCallback(CVDisplayLinkRef displayLink,
     // Calculate filled track
     NSRect filledTrackRect = rect;
     const NSRect knobRect = [self knobRectFlipped:NO];
-    filledTrackRect.size.width = knobRect.origin.x + (knobRect.size.width / 2);
+    const CGFloat fraction = self.maxValue > self.minValue ?
+        (self.doubleValue - self.minValue) / (self.maxValue - self.minValue) : 0.;
+    filledTrackRect.size.width = rect.size.width * MAX(0., MIN(1., fraction));
+    if (self.userInterfaceLayoutDirection == NSUserInterfaceLayoutDirectionRightToLeft) {
+        filledTrackRect.origin.x = NSMaxX(rect) - filledTrackRect.size.width;
+    }
 
     // Filled Track Drawing
     NSBezierPath * const filledTrackPath = 
@@ -177,7 +187,7 @@ static CVReturn DisplayLinkCallback(CVDisplayLinkRef displayLink,
                                         xRadius:trackBorderRadius
                                         yRadius:trackBorderRadius];
 
-    [NSColor.VLCAccentColor setFill];
+    [NSColor.VLCAccentFillColor setFill];
     [filledTrackPath fill];
 }
 

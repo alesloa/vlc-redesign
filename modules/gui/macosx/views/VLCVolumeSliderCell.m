@@ -23,6 +23,7 @@
 #import "VLCVolumeSliderCell.h"
 
 #import "extensions/NSColor+VLCAdditions.h"
+#import "extensions/NSImage+VLCAdditions.h"
 #import "main/CompatibilityFixes.h"
 
 @interface VLCVolumeSliderCell () {
@@ -65,34 +66,35 @@
 
 - (void)drawBarInside:(NSRect)rect flipped:(BOOL)flipped
 {
-    const CGFloat trackBorderRadius = 1;
-
-    // Empty Track Drawing
-    NSBezierPath* emptyTrackPath = [NSBezierPath bezierPathWithRoundedRect:rect
-                                                                   xRadius:trackBorderRadius
-                                                                   yRadius:trackBorderRadius];
-
-    // Calculate filled track
-    NSRect filledTrackRect = rect;
-    NSRect knobRect = [self knobRectFlipped:NO];
-    CGFloat sliderCenter = knobRect.origin.x  + (self.knobThickness / 2);
-
-    if (_isRTL) {
-        filledTrackRect.size.width = rect.origin.x + rect.size.width - sliderCenter;
-        filledTrackRect.origin.x = sliderCenter;
-    } else {
-        filledTrackRect.size.width = sliderCenter;
+    NSImage *background = [NSImage vlc_redesignImageNamed:@"volume-background"];
+    NSImage *fill = [NSImage vlc_redesignImageNamed:@"volume-fill"];
+    if (background == nil || fill == nil) {
+        [super drawBarInside:rect flipped:flipped];
+        return;
     }
+    // Figma volume 244:210: 89x27.3633 background, centered 86x24.56 fill.
+    const NSRect bounds = self.controlView.bounds;
+    NSRect backgroundRect = NSMakeRect(NSMidX(bounds) + .5 - background.size.width / 2.,
+                                      NSMidY(bounds) - background.size.height / 2.,
+                                      background.size.width, background.size.height);
+    NSRect fillRect = NSMakeRect(NSMidX(bounds) + .5 - fill.size.width / 2.,
+                                NSMidY(bounds) - fill.size.height / 2.,
+                                fill.size.width, fill.size.height);
+    const double fraction = self.maxValue > self.minValue ?
+        MAX(0., MIN(1., (self.doubleValue - self.minValue) / (self.maxValue - self.minValue))) : 0.;
+    [background drawInRect:backgroundRect fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:1. respectFlipped:flipped hints:nil];
+    NSRect clip = fillRect;
+    clip.size.width *= fraction;
+    if (_isRTL) clip.origin.x = NSMaxX(fillRect) - clip.size.width;
+    [NSGraphicsContext saveGraphicsState];
+    [[NSBezierPath bezierPathWithRect:clip] addClip];
+    [fill drawInRect:fillRect fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:1. respectFlipped:flipped hints:nil];
+    [NSGraphicsContext restoreGraphicsState];
+}
 
-    NSBezierPath* filledTrackPath = [NSBezierPath bezierPathWithRoundedRect:filledTrackRect
-                                                                    xRadius:trackBorderRadius
-                                                                    yRadius:trackBorderRadius];
-    NSColor *filledColor = NSColor.VLCSliderFillColor;
-
-    [_emptySliderBackgroundColor setFill];
-    [emptyTrackPath fill];
-    [filledColor setFill];
-    [filledTrackPath fill];
+- (void)drawKnob:(NSRect)knobRect
+{
+    // The Figma volume cone is the handle. Preserve NSSlider's tracking/keyboard target without a second native thumb.
 }
 
 @end

@@ -25,6 +25,7 @@
 #import "VLCControlsBarCommon.h"
 
 #import "extensions/NSImage+VLCAdditions.h"
+#import "extensions/NSColor+VLCAdditions.h"
 #import "extensions/NSString+Helpers.h"
 
 #import "library/VLCInputItem.h"
@@ -128,6 +129,13 @@
     _isTimeSliderBeingDragged = NO;
 
     self.dropView.drawBorder = NO;
+    self.playButton.identifier = @"VLCPrimaryPlaybackControl";
+    self.playButton.wantsLayer = YES;
+    self.playButton.layer.cornerRadius = 6.; // Figma Controls 491:1779
+    self.playButton.layer.backgroundColor = NSColor.VLCAccentColor.CGColor;
+    if (@available(macOS 10.14, *)) {
+        self.playButton.contentTintColor = NSColor.whiteColor;
+    }
 
     self.playButton.toolTip = _NS("Play");
     self.playButton.accessibilityLabel = self.playButton.toolTip;
@@ -155,21 +163,15 @@
     self.fullscreenButton.accessibilityLabel = self.fullscreenButton.toolTip;
 
     if (@available(macOS 11.0, *)) {
-        if (@available(macOS 26.0, *)) {
-            _playImage = [NSImage imageWithSystemSymbolName:@"play.fill" accessibilityDescription:_NS("Play")];
-            _pressedPlayImage = [NSImage imageWithSystemSymbolName:@"play.fill" accessibilityDescription:_NS("Play")];
-            _pauseImage = [NSImage imageWithSystemSymbolName:@"pause.fill" accessibilityDescription:_NS("Pause")];
-            _pressedPauseImage = [NSImage imageWithSystemSymbolName:@"pause.fill" accessibilityDescription:_NS("Pause")];
-        } else {
-            _playImage = [NSImage imageWithSystemSymbolName:@"play.circle.fill"
-                                accessibilityDescription:_NS("Play")];
-            _pressedPlayImage = [NSImage imageWithSystemSymbolName:@"play.circle.fill"
-                                        accessibilityDescription:_NS("Play")];
-            _pauseImage = [NSImage imageWithSystemSymbolName:@"pause.circle.fill"
-                                    accessibilityDescription:_NS("Pause")];
-            _pressedPauseImage = [NSImage imageWithSystemSymbolName:@"pause.circle.fill"
-                                        accessibilityDescription:_NS("Pause")];
-        }
+        _playImage = [NSImage imageWithSystemSymbolName:@"play.fill" accessibilityDescription:_NS("Play")];
+        _pressedPlayImage = _playImage;
+        _pauseImage = [NSImage imageWithSystemSymbolName:@"pause.fill" accessibilityDescription:_NS("Pause")];
+        _pressedPauseImage = _pauseImage;
+        NSImageSymbolConfiguration *playConfiguration = [NSImageSymbolConfiguration configurationWithPointSize:18. weight:NSFontWeightSemibold];
+        _playImage = [_playImage imageWithSymbolConfiguration:playConfiguration];
+        _pressedPlayImage = _playImage;
+        _pauseImage = [_pauseImage imageWithSymbolConfiguration:playConfiguration];
+        _pressedPauseImage = _pauseImage;
         _backwardImage = [NSImage imageWithSystemSymbolName:@"backward.fill" accessibilityDescription:_NS("Previous")];
         _forwardImage = [NSImage imageWithSystemSymbolName:@"forward.fill" accessibilityDescription:_NS("Next")];
         _fullscreenImage = [NSImage imageWithSystemSymbolName:@"arrow.up.backward.and.arrow.down.forward"
@@ -178,6 +180,14 @@
                                       accessibilityDescription:_NS("Muted")];
         _unmutedVolumeImage = [NSImage imageWithSystemSymbolName:@"speaker.wave.3.fill"
                                         accessibilityDescription:_NS("Unmuted")];
+
+        _playImage = [NSImage vlc_redesignImageNamed:@"play-accent"] ?: _playImage;
+        _pressedPlayImage = _playImage;
+        _pauseImage = [NSImage vlc_redesignImageNamed:@"pause"] ?: _pauseImage;
+        _pressedPauseImage = _pauseImage;
+        _backwardImage = [NSImage vlc_redesignImageNamed:@"previous"] ?: _backwardImage;
+        _forwardImage = [NSImage vlc_redesignImageNamed:@"next"] ?: _forwardImage;
+        _unmutedVolumeImage = [NSImage vlc_redesignImageNamed:@"volume-high"] ?: _unmutedVolumeImage;
 
         const int64_t shortJumpSize = var_InheritInteger(getIntf(), "short-jump-size");
         NSString * const shortJumpSizeString = [NSString stringWithFormat:@"%lli", shortJumpSize];
@@ -220,6 +230,17 @@
     self.forwardButton.image = _forwardImage;
     self.forwardButton.alternateImage = _forwardImage;
 
+    // Use exact source geometry on every supported AppKit version, with native fallbacks if packaging is incomplete.
+    _playImage = [NSImage vlc_redesignImageNamed:@"play-accent"] ?: _playImage;
+    _pressedPlayImage = _playImage;
+    NSImage *pause = [NSImage vlc_redesignImageNamed:@"pause"];
+    if (pause != nil) { _pauseImage = pause.copy; _pauseImage.template = YES; }
+    _pressedPauseImage = _pauseImage;
+    _backwardImage = [NSImage vlc_redesignImageNamed:@"previous"] ?: _backwardImage;
+    _forwardImage = [NSImage vlc_redesignImageNamed:@"next"] ?: _forwardImage;
+    _fullscreenImage = [NSImage vlc_redesignImageNamed:@"fullscreen"] ?: _fullscreenImage;
+    _mutedVolumeImage = [NSImage vlc_redesignImageNamed:@"volume-muted"] ?: _mutedVolumeImage;
+    _unmutedVolumeImage = [NSImage vlc_redesignImageNamed:@"volume-high"] ?: _unmutedVolumeImage;
     self.fullscreenButton.image = _fullscreenImage;
     self.fullscreenButton.alternateImage = _fullscreenImage;
     self.playButton.image = _playImage;
@@ -299,6 +320,15 @@
 
 - (void)updateJumpButtonVisibilityForWidth:(CGFloat)width
 {
+    if ([self.bottomBarView.identifier isEqualToString:@"VLCRedesignedPlaybackBar"]) {
+        self.jumpBackwardButton.hidden = YES;
+        self.jumpForwardButton.hidden = YES;
+        self.jumpBackwardButtonWidthConstraint.constant = 0.;
+        self.jumpForwardButtonWidthConstraint.constant = 0.;
+        self.jumpBackwardButtonSpacingConstraint.constant = 0.;
+        self.jumpForwardButtonSpacingConstraint.constant = 0.;
+        return;
+    }
     const CGFloat narrowThreshold = VLCUIUnits.libraryWindowControlsBarNarrowWidthThreshold;
 
     if (!_jumpButtonsHidden && width < narrowThreshold) {

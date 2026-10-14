@@ -32,6 +32,7 @@
 #import "playqueue/VLCPlayQueueController.h"
 #import "playqueue/VLCPlayerController.h"
 #import "windows/video/VLCVideoOutputProvider.h"
+#import "views/VLCPlayerEffectsView.h"
 
 #import <vlc_configuration.h>
 
@@ -100,6 +101,8 @@ static NSString * const VLCVideoEffectsDefaultProfileString = @";;;0;1.000000;1.
 {
     VLCPopupPanelController *_popupPanel;
     VLCTextfieldPanelController *_textfieldPanel;
+    NSView *_legacyEffectsContent;
+    VLCPlayerEffectsView *_redesignEffectsView;
 }
 @end
 
@@ -403,6 +406,11 @@ static NSString * const VLCVideoEffectsDefaultProfileString = @";;;0;1.000000;1.
     [_addLogoTransparencyLabel setStringValue:_NS("Transparency")];
 
     [self resetValues];
+    // Keep original nib controls alive for bindings, sender identity, profile
+    // dialogs and the original effects callbacks.
+    _legacyEffectsContent = self.window.contentView;
+    _redesignEffectsView = [[VLCPlayerEffectsView alloc] initWithEffectsController:self audio:NO includeProfileControls:YES];
+    [_redesignEffectsView installInWindow:self.window];
 }
 
 - (void)dealloc
@@ -733,6 +741,8 @@ static NSString * const VLCVideoEffectsDefaultProfileString = @";;;0;1.000000;1.
     [_addLogoTransparencyLabel setEnabled: b_state];
 }
 
+- (void)refreshCurrentValues { [self resetValues]; }
+
 - (NSString *)generateProfileString
 {
     VLCPlayerController *playerController = VLCMain.sharedInstance.playQueueController.playerController;
@@ -851,6 +861,8 @@ static NSString * const VLCVideoEffectsDefaultProfileString = @";;;0;1.000000;1.
     if ([self.window isKeyWindow])
         [self.window orderOut:sender];
     else {
+        [self refreshCurrentValues];
+        [_redesignEffectsView refreshControls];
         [self.window setLevel: VLCMain.sharedInstance.voutProvider.currentStatusWindowLevel];
         [self.window makeKeyAndOrderFront:sender];
     }

@@ -29,6 +29,9 @@ Widgets.IconToolButton {
 
     // Proprerties
 
+    property bool audioTracks: false
+    property int initialTab: audioTracks ? 1 : 0
+
     readonly property var _parentItem: {
         if ((typeof rootPlayer !== 'undefined') && (rootPlayer !== null))
             return rootPlayer
@@ -43,17 +46,21 @@ Widgets.IconToolButton {
 
     // Settings
 
-    text: VLCIcons.audiosub
+    text: audioTracks ? VLCIcons.volume_high : VLCIcons.audiosub
+    iconSource: audioTracks ? "qrc:///redesign/icons/audio.svg" : "qrc:///redesign/icons/subtitles.svg"
 
     enabled: menuLoader.status === Loader.Ready
 
-    description: qsTr("Languages and tracks")
+    description: audioTracks ? qsTr("Audio") : qsTr("Languages and tracks")
 
-    AccessibleCompat.id: "langButton"
+    AccessibleCompat.id: audioTracks ? "audioTracksButton" : "langButton"
 
     // Events
 
-    onClicked: menuLoader.item.open()
+    onClicked: {
+        menuLoader.item.initialTab = initialTab
+        menuLoader.item.open()
+    }
 
     // Children
 
@@ -65,8 +72,9 @@ Widgets.IconToolButton {
 
             parent: root._parentItem
 
-            x: 0
-            y: (parent.positionSliderY - height)
+            x: sideAligned ? Math.max(0, parent.width - width - VLCStyle.margin_small)
+                           : VLCStyle.margin_small
+            y: sideAligned ? panelTop : Math.max(panelTop, panelBottom - height - VLCStyle.margin_small)
             z: 1
 
             focus: true
@@ -76,6 +84,7 @@ Widgets.IconToolButton {
             onOpened: {
                 root.requestLockUnlockAutoHide(true)
                 root.menuOpened(menu)
+                menu.contentItem.forceActiveFocus(Qt.PopupFocusReason)
             }
 
             onClosed: {

@@ -30,6 +30,7 @@ import VLC.Player
 
 TracksPage {
     id: root
+    initialFocusItem: spinBox
 
     // Functions
 
@@ -51,17 +52,26 @@ TracksPage {
 
         Widgets.SubtitleLabel {
             Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            wrapMode: Text.WordWrap
+            elide: Text.ElideNone
+            font.pixelSize: root.inlineMode ? VLCStyle.dp(14, VLCStyle.scale) : VLCStyle.fontSize_xxxlarge
+            font.weight: root.inlineMode ? Font.Normal : Font.Bold
 
             text: qsTr("Audio track synchronization")
 
             color: root.colorContext.fg.primary
         }
 
-        RowLayout {
+        GridLayout {
+            id: delayGrid
             Layout.fillWidth: true
+            Layout.minimumWidth: 0
             Layout.topMargin: VLCStyle.margin_large
 
-            spacing: VLCStyle.margin_xsmall
+            columns: width >= delayCaption.implicitWidth + spinBox.implicitWidth + reset.implicitWidth + columnSpacing * 2 ? 3 : 2
+            columnSpacing: VLCStyle.margin_xsmall
+            rowSpacing: VLCStyle.margin_xsmall
 
             Accessible.role: Accessible.Grouping
             Accessible.name: qsTr("Audio track delay")
@@ -72,8 +82,13 @@ TracksPage {
             }
 
             Widgets.MenuCaption {
+                id: delayCaption
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                Layout.columnSpan: delayGrid.columns === 3 ? 1 : 2
                 Layout.alignment: Qt.AlignHCenter
+                wrapMode: Text.WordWrap
+                elide: Text.ElideNone
 
                 text: qsTr("Audio track delay")
 
@@ -86,6 +101,7 @@ TracksPage {
                 property bool update: false
 
                 Layout.preferredWidth: VLCStyle.dp(128, VLCStyle.scale)
+                Layout.minimumWidth: 0
 
                 stepSize: 50
                 from: -10000
@@ -138,14 +154,37 @@ TracksPage {
             }
         }
 
-        RowLayout {
+        Widgets.SliderExt {
+            id: delaySlider
             Layout.fillWidth: true
-            Layout.alignment: Qt.AlignRight
+            from: -10000
+            to: 10000
+            stepSize: 50
+            Accessible.name: qsTr("Audio track delay")
+            toolTipTextProvider: (value) => root.textFromValue(value, Qt.locale())
+            onMoved: Player.audioDelayMS = Math.round(value)
+            Binding on value {
+                when: !delaySlider.pressed
+                restoreMode: Binding.RestoreNone
+                value: Player.audioDelayMS
+            }
+            Navigation.parentItem: root
+            Navigation.upItem: spinBox
+            Navigation.downItem: soundHeard
+        }
 
-            spacing: VLCStyle.margin_xsmall
+        GridLayout {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            Layout.alignment: Qt.AlignRight
+            columns: width >= soundHeard.implicitWidth + soundSpotted.implicitWidth + columnSpacing ? 2 : 1
+            columnSpacing: VLCStyle.margin_xsmall
+            rowSpacing: VLCStyle.margin_xsmall
 
             Widgets.TrackDelayButton {
                 id: soundHeard
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
 
                 text: qsTr("Sound Heard")
                 iconTxt: VLCIcons.check
@@ -160,6 +199,8 @@ TracksPage {
 
             Widgets.TrackDelayButton {
                 id: soundSpotted
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
 
                 text: qsTr("Sound Spotted")
                 iconTxt: VLCIcons.check

@@ -19,6 +19,7 @@
 import QtQuick
 import QtQuick.Templates as T
 import QtQuick.Layouts
+import QtQuick.Controls.Basic
 
 
 import VLC.MainInterface
@@ -31,6 +32,7 @@ ColumnLayout {
     id: root
 
     property alias slider: slider
+    property bool inlineMode: false
 
     signal radioButtonClicked(T.AbstractButton button)
 
@@ -77,7 +79,9 @@ ColumnLayout {
     }
 
     function _applySlider(value) {
-        value = 17 * Math.log(value) / Math.log(2)
+        // Reverse retains the player's signed rate; slider geometry describes
+        // its speed magnitude and must remain finite for supported rewind.
+        value = 17 * Math.log(Math.abs(value)) / Math.log(2)
 
         if (value <= 1.0)
             slider.value = Math.max(slider.from, value)
@@ -147,6 +151,60 @@ ColumnLayout {
         AccessibleCompat.id: "playbackSpeedLabel"
 
         color: theme.fg.primary
+        visible: !root.inlineMode
+    }
+
+    RowLayout {
+        visible: root.inlineMode
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
+        spacing: VLCStyle.margin_xsmall
+        Widgets.MenuCaption {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            // Source: Figma playback row5187:24541 uses Speed at14px.
+            text: qsTr("Speed")
+            font.pixelSize: VLCStyle.dp(14, VLCStyle.scale)
+            color: theme.fg.secondary
+        }
+        Widgets.TextFieldExt {
+            id: rateValue
+            Layout.preferredWidth: VLCStyle.dp(140, VLCStyle.scale)
+            Layout.maximumWidth: VLCStyle.dp(140, VLCStyle.scale)
+            Layout.minimumWidth: 0
+            implicitHeight: VLCStyle.dp(32, VLCStyle.scale)
+            rightPadding: VLCStyle.dp(24, VLCStyle.scale)
+            font.pixelSize: VLCStyle.dp(14, VLCStyle.scale)
+            selectByMouse: true
+            inputMethodHints: Qt.ImhFormattedNumbersOnly
+            Accessible.name: qsTr("Playback speed")
+            Navigation.parentItem: root
+            Navigation.downItem: slider
+            validator: DoubleValidator { bottom: root._minimum; top: root._maximum; decimals: 3 }
+            onActiveFocusChanged: MainCtx.useGlobalShortcuts = !activeFocus
+            Component.onDestruction: if (activeFocus) MainCtx.useGlobalShortcuts = true
+            onEditingFinished: {
+                const value = Number.fromLocaleString(Qt.locale(), text)
+                if (Number.isFinite(value) && value >= root._minimum && value <= root._maximum)
+                    Player.rate = value
+            }
+            Binding on text {
+                when: !rateValue.activeFocus
+                restoreMode: Binding.RestoreNone
+                value: Number(Player.rate).toLocaleString(Qt.locale(), 'g', 6)
+            }
+            Widgets.MenuCaption {
+                anchors.right: parent.right
+                anchors.rightMargin: VLCStyle.dp(10, VLCStyle.scale)
+                anchors.verticalCenter: parent.verticalCenter
+                // Source: Figma row5187:24543's rate suffix. Its numeric value
+                // always comes from Player.rate, including the original4×range.
+                text: "x"
+                color: theme.fg.secondary
+                font.pixelSize: VLCStyle.dp(14, VLCStyle.scale)
+                Accessible.ignored: true
+            }
+        }
     }
 
     Item {
@@ -157,6 +215,7 @@ ColumnLayout {
         Layout.alignment: Qt.AlignTop
 
         Navigation.parentItem: root
+        Navigation.upItem: root.inlineMode ? rateValue : null
         Navigation.downItem: slider
 
         Widgets.CaptionLabel {
@@ -207,6 +266,7 @@ ColumnLayout {
         AccessibleCompat.id: "playbackSpeedSlider"
 
         Navigation.parentItem: root
+        Navigation.upItem: root.inlineMode ? rateValue : null
 
         Keys.priority: Keys.AfterItem
         Keys.onPressed: (event) => Navigation.defaultKeyAction(event)
@@ -241,12 +301,14 @@ ColumnLayout {
     }
 
     Widgets.ListLabel {
+        visible: !root.inlineMode
         text: qsTr("Presets:")
         color: colorContext.fg.primary
         Layout.fillWidth: true
     }
 
     GridLayout {
+        visible: !root.inlineMode
         Layout.fillWidth: true
         Layout.fillHeight: true
 

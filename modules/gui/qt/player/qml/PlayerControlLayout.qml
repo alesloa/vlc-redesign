@@ -30,11 +30,13 @@ FocusScope {
 
     // Properties
 
-    property real spacing: VLCStyle.margin_normal // spacing between controls
+    property real spacing: VLCStyle.margin_small // spacing between controls
 
-    property real layoutSpacing: VLCStyle.margin_xxlarge // spacing between layouts (left, center, and right)
+    property real layoutSpacing: VLCStyle.margin_large // spacing between layouts (left, center, and right)
 
     property int identifier: -1
+    property bool inlineSeekBar: false
+    readonly property Item seekContainer: loaderLeftRight.item?.seekArea ?? null
 
     readonly property PlayerControlbarModel model: {
         if (!!MainCtx.controlbarProfileModel.currentModel)
@@ -82,6 +84,7 @@ FocusScope {
         focus: active
 
         sourceComponent: RowLayout {
+            readonly property Item seekArea: seekContainer
             spacing: playerControlLayout.spacing
 
             focus: true
@@ -118,6 +121,8 @@ FocusScope {
             }
 
             Item {
+                id: seekContainer
+                Layout.fillHeight: true
                 function containsVisibleItem(repeater) {
                     for (let i = 0; i < repeater.count; ++i) {
                         const item = repeater.itemAt(i)
@@ -129,7 +134,8 @@ FocusScope {
                     return false
                 }
 
-                Layout.minimumWidth: (containsVisibleItem(leftRepeater) && containsVisibleItem(rightRepeater)) ? playerControlLayout.layoutSpacing
+                Layout.minimumWidth: playerControlLayout.inlineSeekBar ? VLCStyle.dp(240, VLCStyle.scale)
+                                                                 : (containsVisibleItem(leftRepeater) && containsVisibleItem(rightRepeater)) ? playerControlLayout.layoutSpacing
                                                                                                                : 0
 
                 Layout.fillWidth: true

@@ -26,6 +26,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface VLCMainVideoViewControlsBar : VLCControlsBarCommon
 
+- (void)closePlaybackSettings:(nullable id)sender;
+
 @property (readwrite, weak) IBOutlet NSButton *bookmarksButton;
 @property (readwrite, weak) IBOutlet NSButton *subtitlesButton;
 @property (readwrite, weak) IBOutlet NSButton *audioButton;

@@ -38,6 +38,9 @@
     BOOL _autohideTitlebar;
     NSTimer *_hideTitlebarTimer;
     BOOL _isFadingIn;
+    BOOL _titlebarIsTearingDown;
+    NSUInteger _titlebarTimerGeneration;
+    __weak VLCMain *_interfaceOwner;
 }
 @end
 
@@ -47,12 +50,17 @@
 {
     [super setup];
     _autohideTitlebar = NO;
+    _interfaceOwner = VLCMain.sharedInstance;
 
     NSNotificationCenter *notificationCenter = NSNotificationCenter.defaultCenter;
     [notificationCenter addObserver:self
                            selector:@selector(shouldShowFullscreenController:)
                                name:VLCVideoWindowShouldShowFullscreenController
                              object:nil];
+    [notificationCenter addObserver:self selector:@selector(titlebarWillTerminate:)
+                               name:NSApplicationWillTerminateNotification object:nil];
+    [notificationCenter addObserver:self selector:@selector(titlebarWindowWillClose:)
+                               name:NSWindowWillCloseNotification object:self];
 
     self.titleVisibility = NSWindowTitleHidden;
     self.styleMask |= NSWindowStyleMaskFullSizeContentView;
@@ -63,10 +71,36 @@
 - (void)stopTitlebarAutohideTimer
 {
     [_hideTitlebarTimer invalidate];
+    _hideTitlebarTimer = nil;
+    ++_titlebarTimerGeneration;
+}
+
+- (void)titlebarWillTerminate:(NSNotification *)notification
+{
+    _titlebarIsTearingDown = YES;
+    [self stopTitlebarAutohideTimer];
+}
+
+- (void)titlebarWindowWillClose:(NSNotification *)notification
+{
+    [self stopTitlebarAutohideTimer];
+}
+
+- (void)dealloc
+{
+    [NSNotificationCenter.defaultCenter removeObserver:self];
+    [_hideTitlebarTimer invalidate];
 }
 
 - (void)startTitlebarAutohideTimer
 {
+    // Animation completions can run after CloseIntf has retired the interface.
+    // Use the existing owner; sharedInstance would create another during teardown.
+    VLCMain *owner = _interfaceOwner;
+    if (_titlebarIsTearingDown || !owner || owner.isTerminating ||
+        !_autohideTitlebar || getIntf() == NULL) {
+        return;
+    }
     /* Do nothing if timer is already in place */
     if (_hideTitlebarTimer.valid) {
         return;
@@ -85,6 +119,10 @@
 - (void)showTitleBar
 {
     [self stopTitlebarAutohideTimer];
+    if (_titlebarIsTearingDown) {
+        return;
+    }
+    const NSUInteger generation = _titlebarTimerGeneration;
 
     NSView *titlebarView = [self standardWindowButton:NSWindowCloseButton].superview;
 
@@ -99,13 +137,18 @@
         [titlebarView.animator setAlphaValue:1.0f];
     } completionHandler:^{
         self->_isFadingIn = NO;
-        [self startTitlebarAutohideTimer];
+        if (generation == self->_titlebarTimerGeneration) {
+            [self startTitlebarAutohideTimer];
+        }
     }];
 }
 
 - (void)hideTitleBar:(id)sender
 {
     [self stopTitlebarAutohideTimer];
+    if (_titlebarIsTearingDown) {
+        return;
+    }
 
     if (self.videoViewController.mouseOnControls ||
         !_autohideTitlebar ||

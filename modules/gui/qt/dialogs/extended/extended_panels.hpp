@@ -57,6 +57,7 @@ private:
     void setWidgetValue( QObject* );
     void setupSliderValueLabel( QSlider *slider, QLabel *label );
     void clean();
+    void redesignControls(QTabWidget *);
     void setFilterOption( const char *psz_module, const char *psz_option, int,
                           double, const char * );
     void changeVFiltersString( const char *psz_name, bool b_add );

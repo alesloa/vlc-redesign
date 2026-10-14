@@ -668,6 +668,8 @@ extern const CGFloat VLCVolumeDefault;
  * @note listen to VLCPlayerSubtitlesDelayChanged to be notified about changes to this property
  */
 @property (readwrite, nonatomic) vlc_tick_t subtitlesDelay;
+// Existing core secondary-vout track delay, with no selected track represented by zero.
+@property (readwrite, nonatomic) vlc_tick_t secondarySubtitlesDelay;
 
 /**
  * fetch the delay for a specific track identified through its elementary stream ID

@@ -36,8 +36,28 @@
 #include <QDialogButtonBox>
 #include <QPushButton>
 #include <QWindow>
+#include <QListWidget>
+#include <QTabBar>
+#include <QComboBox>
+#include <QLabel>
+#include <QToolButton>
 #include <vlc_configuration.h>
 #include <vlc_modules.h>
+
+namespace {
+QComboBox *effectsSelector( QTabWidget *tabs, QWidget *parent )
+{
+    auto selector = new QComboBox(parent);
+    selector->setObjectName(QStringLiteral("effectPanelSelector"));
+    selector->setFixedSize(320,36);
+    for(int i=0;i<tabs->count();++i) selector->addItem(tabs->tabText(i));
+    selector->setCurrentIndex(tabs->currentIndex());
+    tabs->tabBar()->hide();
+    QObject::connect(selector,qOverload<int>(&QComboBox::currentIndexChanged),tabs,&QTabWidget::setCurrentIndex);
+    QObject::connect(tabs,&QTabWidget::currentChanged,selector,&QComboBox::setCurrentIndex);
+    return selector;
+}
+}
 
 ExtendedDialog::ExtendedDialog( qt_intf_t *_p_intf )
                : QVLCDialog( nullptr, _p_intf )
@@ -51,17 +71,37 @@ ExtendedDialog::ExtendedDialog( qt_intf_t *_p_intf )
     setWindowOpacity( var_InheritFloat( p_intf, "qt-opacity" ) );
     setWindowTitle( qtr( "Adjustments and Effects" ) );
     setWindowRole( "vlc-extended" );
+    setObjectName(QStringLiteral("extendedEffectsDialog"));
 
     QVBoxLayout *layout = new QVBoxLayout( this );
-    layout->setContentsMargins( 0, 2, 0, 1 );
-    layout->setSpacing( 3 );
+    layout->setContentsMargins(0,0,0,0);
+    layout->setSpacing(0);
+    auto header = new QWidget(this);
+    header->setObjectName(QStringLiteral("preferencesHeader"));
+    header->setFixedHeight(50);
+    auto headerLayout = new QHBoxLayout(header);
+    headerLayout->setContentsMargins(20,9,9,9);
+    auto heading = new QLabel(windowTitle(),header);
+    headerLayout->addWidget(heading,1);
+    auto headerClose = new QToolButton(header);
+    headerClose->setIcon(QIcon(QStringLiteral(":/redesign/icons/settings-close.svg")));
+    headerClose->setIconSize(QSize(24,24));
+    headerClose->setFixedSize(32,32);
+    headerClose->setAccessibleName(qtr("Close"));
+    connect(headerClose,&QToolButton::clicked,this,&ExtendedDialog::close);
+    headerLayout->addWidget(headerClose);
+    layout->addWidget(header);
 
     mainTabW = new QTabWidget( this );
+    mainTabW->setProperty("effectPanels",true);
 
     /* AUDIO effects */
     QWidget *audioWidget = new QWidget;
-    QHBoxLayout *audioLayout = new QHBoxLayout( audioWidget );
+    QVBoxLayout *audioLayout = new QVBoxLayout( audioWidget );
+    audioLayout->setContentsMargins(0,0,0,0);
+    audioLayout->setSpacing(20);
     QTabWidget *audioTab = new QTabWidget( audioWidget );
+    audioTab->setProperty("effectPanels",true);
 
     equal = new Equalizer( p_intf, audioTab );
     connect( equal, &AudioFilterControlWidget::configChanged, this, &ExtendedDialog::putAudioConfig );
@@ -103,19 +143,23 @@ ExtendedDialog::ExtendedDialog( qt_intf_t *_p_intf )
     advancedTab->setLayout( advancedTabLayout );
     audioTab->addTab( advancedTab, qtr( "Advanced" ) );
 
-    audioLayout->addWidget( audioTab );
+    audioLayout->addWidget(effectsSelector(audioTab,audioWidget),0,Qt::AlignLeft);
+    audioLayout->addWidget( audioTab,1 );
 
     mainTabW->insertTab( AUDIO_TAB, audioWidget, qtr( "Audio Effects" ) );
 
     /* Video Effects */
     QWidget *videoWidget = new QWidget;
-    QHBoxLayout *videoLayout = new QHBoxLayout( videoWidget );
+    QVBoxLayout *videoLayout = new QVBoxLayout( videoWidget );
+    videoLayout->setContentsMargins(0,0,0,0);
+    videoLayout->setSpacing(20);
     QTabWidget *videoTab = new QTabWidget( videoWidget );
+    videoTab->setProperty("effectPanels",true);
 
     videoEffect = new ExtVideo( p_intf, videoTab );
     connect( videoEffect, &ExtVideo::configChanged, this, &ExtendedDialog::putVideoConfig );
-    videoLayout->addWidget( videoTab );
-    videoTab->setSizePolicy( QSizePolicy::Preferred, QSizePolicy::Maximum );
+    videoLayout->addWidget(effectsSelector(videoTab,videoWidget),0,Qt::AlignLeft);
+    videoLayout->addWidget( videoTab,1 );
 
     mainTabW->insertTab( VIDEO_TAB, videoWidget, qtr( "Video Effects" ) );
 
@@ -128,27 +172,56 @@ ExtendedDialog::ExtendedDialog( qt_intf_t *_p_intf )
         mainTabW->insertTab( V4L2_TAB, v4l2, qtr( "v4l2 controls" ) );
     }
 
-    layout->addWidget( mainTabW );
+    auto effects_navigation = new QListWidget( this );
+    effects_navigation->setObjectName( QStringLiteral("dialogNavigation") );
+    effects_navigation->setFixedWidth(200);
+    effects_navigation->setSpacing(8);
+    effects_navigation->setFrameShape( QFrame::NoFrame );
+    for( int i = 0; i < mainTabW->count(); ++i )
+    {
+        // Section names are the existing effects/synchronization tab labels.
+        auto item = new QListWidgetItem( mainTabW->tabText(i), effects_navigation );
+        item->setSizeHint( QSize(0,40) );
+    }
+    auto effects_layout = new QHBoxLayout;
+    effects_layout->setContentsMargins(8,20,24,20);
+    effects_layout->setSpacing( 20 );
+    effects_layout->addWidget( effects_navigation );
+    effects_layout->addWidget( mainTabW, 1 );
+    layout->addLayout( effects_layout, 1 );
+    mainTabW->tabBar()->hide();
+    effects_navigation->setCurrentRow( mainTabW->currentIndex() );
+    connect( effects_navigation, &QListWidget::currentRowChanged,
+             mainTabW, &QTabWidget::setCurrentIndex );
+    connect( mainTabW, &QTabWidget::currentChanged,
+             effects_navigation, QOverload<int>::of(&QListWidget::setCurrentRow) );
     connect( mainTabW, &QTabWidget::currentChanged, this, &ExtendedDialog::currentTabChanged );
+    connect(mainTabW,&QTabWidget::currentChanged,heading,[this,heading](int index){
+        heading->setText(mainTabW->tabText(index));
+    });
+    heading->setText(mainTabW->tabText(mainTabW->currentIndex()));
 
     /* Bottom buttons */
-    QDialogButtonBox *buttonBox = new QDialogButtonBox( Qt::Horizontal, this );
-
-    m_applyButton = new QPushButton( qtr("&Save"), this );
+    auto footer = new QWidget(this);
+    footer->setFixedHeight(72);
+    auto footerLayout = new QHBoxLayout(footer);
+    footerLayout->setContentsMargins(20,20,20,20);
+    auto close = new QPushButton(qtr("&Close"),footer);
+    close->setFixedSize(100,32);
+    footerLayout->addWidget(close);
+    footerLayout->addStretch();
+    m_applyButton = new QPushButton( qtr("&Save"), footer );
     m_applyButton->setEnabled( false );
-    buttonBox->addButton( m_applyButton, QDialogButtonBox::ApplyRole );
-
-    buttonBox->addButton(
-        new QPushButton( qtr("&Close"), this ), QDialogButtonBox::RejectRole );
-    layout->addWidget( buttonBox );
-
-    connect( buttonBox, &QDialogButtonBox::rejected, this, &ExtendedDialog::close );
+    m_applyButton->setFixedSize(100,32);
+    footerLayout->addWidget(m_applyButton);
+    layout->addWidget(footer);
+    connect(close,&QPushButton::clicked,this,&ExtendedDialog::close);
     connect( m_applyButton, &QPushButton::clicked, this, &ExtendedDialog::saveConfig );
 
     /* Restore geometry or move this dialog on the left pane of the MI */
     if( !restoreGeometry( getSettings()->value("EPanel/geometry").toByteArray() ) )
     {
-        resize( QSize( 400, 280 ) );
+        resize( QSize(1048,800) );
 
         QWindow *window = p_intf->p_compositor->interfaceMainWindow();
         if( window && window->x() > 50 )

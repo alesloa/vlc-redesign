@@ -27,6 +27,7 @@ Widgets.IconToolButton {
     id: nextBtn
 
     text: VLCIcons.next
+    iconSource: "qrc:///redesign/icons/next.svg"
     enabled: MainPlaylistController.hasNext
     onClicked: MainPlaylistController.next()
     description: qsTr("Next")

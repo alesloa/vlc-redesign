@@ -16,6 +16,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
  *****************************************************************************/
 import QtQuick
+import QtQuick.Controls.Basic
 import QtQuick.Templates as T
 import QtQuick.Layouts
 
@@ -29,23 +30,30 @@ WindowDialog {
     id: root
 
     width: minimumWidth
-    height: 600
+    height: 880
 
-    minimumWidth: 825
-    minimumHeight: 400
+    minimumWidth: 1048
+    minimumHeight: 680
 
     modal: true
-    title: qsTr("Toolbar Editor")
+    title: qsTr("Customize Player") // Figma 6587:18870.
+    objectName: "toolbarEditorDialog"
+    contentMargins: 0
+    standardButtons: T.DialogButtonBox.NoButton
+    property bool profileChanges: false
+    property bool editingStarted: false
 
     signal unload()
 
     Component.onCompleted: {
         // Save first, in case the dialog is rejected.
         MainCtx.controlbarProfileModel.save(false)
+        editingStarted = true
     }
 
     onAccepted: {
         MainCtx.controlbarProfileModel.save()
+        DialogsProvider.settingsProfileUpdated()
         unload()
     }
 
@@ -74,6 +82,16 @@ WindowDialog {
         return (text += " *")
     }
 
+    Connections {
+        target: MainCtx.controlbarProfileModel
+        function onSelectedProfileChanged() { if (root.editingStarted) root.profileChanges = true }
+        function onCountChanged() { if (root.editingStarted) root.profileChanges = true }
+    }
+    Connections {
+        target: MainCtx.controlbarProfileModel.currentModel
+        function onNameChanged() { if (root.editingStarted) root.profileChanges = true }
+    }
+
     contentComponent: Item {
         MouseArea {
             anchors.fill: parent
@@ -83,12 +101,38 @@ WindowDialog {
 
         ColumnLayout {
             anchors.fill: parent
+            spacing: 0
 
-            spacing: VLCStyle.margin_small
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: MainCtx.dp(50, VLCStyle.scale)
+                color: root.colorContext.bg.secondary
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: MainCtx.dp(20, VLCStyle.scale)
+                    anchors.rightMargin: MainCtx.dp(9, VLCStyle.scale)
+                    Text {
+                        Layout.fillWidth: true
+                        text: root.title
+                        color: root.colorContext.fg.primary
+                        font.pixelSize: VLCStyle.fontSize_normal
+                    }
+                    Widgets.IconToolButton {
+                        objectName: "toolbarEditorClose"
+                        Layout.preferredWidth: MainCtx.dp(32, VLCStyle.scale)
+                        Layout.preferredHeight: MainCtx.dp(32, VLCStyle.scale)
+                        iconSource: "qrc:/redesign/icons/settings-close.svg"
+                        text: VLCIcons.clear
+                        description: qsTr("Close")
+                        onClicked: root.rejected(true)
+                    }
+                }
+            }
 
             RowLayout {
                 Layout.fillHeight: false
-
+                Layout.fillWidth: true
+                Layout.margins: MainCtx.dp(20, VLCStyle.scale)
                 spacing: VLCStyle.margin_xsmall
 
                 Widgets.MenuLabel {
@@ -104,7 +148,7 @@ WindowDialog {
 
                     Layout.fillWidth: (implicitWidth > Layout.minimumWidth)
                     Layout.minimumWidth: VLCStyle.combobox_width_large
-                    Layout.minimumHeight: VLCStyle.combobox_height_normal
+                    Layout.minimumHeight: MainCtx.dp(36, VLCStyle.scale)
 
                     // this is not proper way to do it,
                     // but ComboBoxExt does not provide
@@ -188,6 +232,32 @@ WindowDialog {
 
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.leftMargin: MainCtx.dp(20, VLCStyle.scale)
+                Layout.rightMargin: MainCtx.dp(20, VLCStyle.scale)
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.preferredHeight: MainCtx.dp(72, VLCStyle.scale)
+                Layout.leftMargin: MainCtx.dp(20, VLCStyle.scale)
+                Layout.rightMargin: MainCtx.dp(20, VLCStyle.scale)
+                Widgets.ButtonExt {
+                    objectName: "toolbarEditorCancel"
+                    Layout.preferredWidth: MainCtx.dp(100, VLCStyle.scale)
+                    Layout.preferredHeight: MainCtx.dp(32, VLCStyle.scale)
+                    text: qsTr("Cancel")
+                    onClicked: root.rejected(true)
+                }
+                Item { Layout.fillWidth: true }
+                Widgets.ButtonExt {
+                    objectName: "toolbarEditorSave"
+                    Layout.preferredWidth: MainCtx.dp(100, VLCStyle.scale)
+                    Layout.preferredHeight: MainCtx.dp(32, VLCStyle.scale)
+                    text: qsTr("Save")
+                    enabled: root.profileChanges || !!MainCtx.controlbarProfileModel.currentModel?.dirty
+                    color: root.colorContext.accent
+                    onClicked: root.accepted()
+                }
             }
         }
     }

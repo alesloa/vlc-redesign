@@ -163,5 +163,10 @@
 - (IBAction)advancedStereoPanSliderUpdated:(id)sender;
 - (IBAction)advancedEnablePitchAction:(id)sender;
 - (IBAction)advancedEnableStereoPanAction:(id)sender;
+- (void)refreshCurrentValues;
+/* GUI adapters for the already-existing stereo_widen Aout variables. */
+- (nullable NSNumber *)redesignStereoValueForOption:(NSString * _Nonnull)option;
+- (BOOL)redesignSetStereoValue:(double)value forOption:(NSString * _Nonnull)option;
+- (BOOL)redesignHasAudioOutput;
 
 @end

@@ -20,6 +20,7 @@
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Templates as T
 
 
 import VLC.MainInterface
@@ -35,6 +36,9 @@ RowLayout {
     default property alias content: content.data
 
     property int preferredWidth: VLCStyle.dp(512, VLCStyle.scale)
+    property bool inlineMode: false
+    property Item initialFocusItem: null
+    readonly property real contentHeight: content.childrenRect.height
 
     //FIXME make TrackMenuController a proper type (see TrackMenu)
     required property QtObject trackMenuController
@@ -44,8 +48,12 @@ RowLayout {
     spacing: 0
 
     focus: true
+    onActiveFocusChanged: {
+        if (activeFocus && initialFocusItem)
+            initialFocusItem.forceActiveFocus(Qt.TabFocusReason)
+    }
 
-    Navigation.leftItem: button
+    Navigation.leftItem: inlineMode ? null : button
 
     // Children
 
@@ -55,7 +63,8 @@ RowLayout {
     }
 
     Item {
-        Layout.preferredWidth: VLCStyle.dp(72, VLCStyle.scale)
+        visible: !root.inlineMode
+        Layout.preferredWidth: VLCStyle.dp(48, VLCStyle.scale)
         Layout.fillHeight: true
 
         Layout.topMargin: VLCStyle.margin_large
@@ -80,18 +89,30 @@ RowLayout {
     }
 
     Rectangle {
+        visible: !root.inlineMode
         Layout.preferredWidth: VLCStyle.margin_xxxsmall
         Layout.fillHeight: true
 
         color: theme.border
     }
 
-    FocusScope {
-        id: content
-
+    Flickable {
+        implicitHeight: root.inlineMode ? content.childrenRect.height : 0
         Layout.fillWidth: true
         Layout.fillHeight: true
+        Layout.margins: root.inlineMode ? 0 : VLCStyle.margin_large
 
-        Layout.margins: VLCStyle.margin_large
+        contentWidth: width
+        contentHeight: content.childrenRect.height
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+
+        T.ScrollBar.vertical: Widgets.ScrollBarExt { }
+
+        FocusScope {
+            id: content
+            width: parent.width
+            height: childrenRect.height
+        }
     }
 }

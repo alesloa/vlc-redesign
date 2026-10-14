@@ -23,14 +23,56 @@
 #import "VLCPlaybackProgressSlider.h"
 
 #import "extensions/NSString+Helpers.h"
+#import "extensions/NSColor+VLCAdditions.h"
+#import "extensions/NSImage+VLCAdditions.h"
+#import "extensions/NSFont+VLCAdditions.h"
 #import "extensions/NSView+VLCAdditions.h"
 #import "main/CompatibilityFixes.h"
+#import "main/VLCMain.h"
+#import "library/VLCInputItem.h"
+#import "playqueue/VLCPlayQueueController.h"
+#import "playqueue/VLCPlayerController.h"
 #import "views/VLCPlaybackProgressSliderCell.h"
+#import <vlc_preparser.h>
+
+@interface VLCSeekPreviewRequest : NSObject
+@property (weak) VLCPlaybackProgressSlider *slider;
+@property vlc_preparser_req *request;
+@property NSUInteger generation;
+@end
+@implementation VLCSeekPreviewRequest
+@end
+@interface VLCPlaybackProgressSlider (SeekPreview)
+- (void)receivePreview:(NSImage *)image request:(VLCSeekPreviewRequest *)request;
+@end
+static void seekPreviewEnded(vlc_preparser_req *handle, int status, picture_t *picture, void *opaque)
+{
+    @autoreleasepool {
+        VLCSeekPreviewRequest *request = CFBridgingRelease(opaque);
+        NSImage *image = status == VLC_SUCCESS && picture ?
+            [NSImage imageFromVLCPicture:picture vlcObject:VLC_OBJECT(getIntf()) size:NSMakeSize(252,142)] : nil;
+        // The caller's handle remains owned until this main-queue completion,
+        // so mouse exit can safely Cancel even after the core callback finished.
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [request.slider receivePreview:image request:request];
+            request.request = NULL;
+            vlc_preparser_req_Release(handle);
+        });
+    }
+}
 
 @implementation VLCPlaybackProgressSlider {
     NSTrackingArea *_hoverTrackingArea;
     NSWindow *_hoverWindow;
     NSTextField *_hoverLabel;
+    NSImageView *_hoverImage;
+    VLCSeekPreviewRequest *_previewRequest;
+    NSTimer *_previewTimer;
+    NSUInteger _previewGeneration;
+    CGFloat _hoverX;
+    vlc_tick_t _hoverTime;
+    BOOL _hovering;
+    BOOL _interfaceTerminating;
 }
 
 + (Class)cellClass
@@ -46,6 +88,8 @@
         NSAssert([self.cell isKindOfClass:[VLCPlaybackProgressSlider cellClass]],
                  @"VLCPlaybackProgressSlider cell is not a VLCPlaybackProgressSliderCell");
         self.scrollable = YES;
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(interfaceWillTerminate:) name:NSApplicationWillTerminateNotification object:nil];
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(previewMediaChanged:) name:VLCPlayerCurrentMediaItemChanged object:nil];
         if (@available(macOS 10.14, *)) {
             [self viewDidChangeEffectiveAppearance];
             self.clipsToBounds = YES;
@@ -162,6 +206,7 @@
 - (void)dealloc
 {
     [self hideHoverWindow];
+    [NSNotificationCenter.defaultCenter removeObserver:self];
 }
 
 - (BOOL)hoverIsAvailable
@@ -176,17 +221,22 @@
     }
 
     _hoverLabel = [NSTextField labelWithString:@""];
-    _hoverLabel.font =
-        [NSFont monospacedDigitSystemFontOfSize:NSFont.smallSystemFontSize
-                                         weight:NSFontWeightRegular];
+    // Figma2151:9673/9674: 272x189 panel, 252x142 image, 15px time,
+    // 10px padding/gap, 14px panel and 4px image radii.
+    _hoverLabel.font = [NSFont vlc_redesignFontOfSize:15 weight:NSFontWeightRegular];
     _hoverLabel.alignment = NSTextAlignmentCenter;
     _hoverLabel.textColor = NSColor.controlTextColor;
 
     NSView * const contentView = [[NSView alloc] initWithFrame:NSZeroRect];
     contentView.wantsLayer = YES;
     contentView.layer.borderWidth = 0.5;
-    contentView.layer.cornerRadius = 3.0;
+    contentView.layer.cornerRadius = 14.0;
     [contentView addSubview:_hoverLabel];
+    _hoverImage = [[NSImageView alloc] initWithFrame:NSZeroRect];
+    _hoverImage.imageScaling = NSImageScaleProportionallyUpOrDown;
+    _hoverImage.hidden = YES; _hoverImage.wantsLayer = YES;
+    _hoverImage.layer.cornerRadius = 4; _hoverImage.layer.masksToBounds = YES;
+    [contentView addSubview:_hoverImage];
 
     _hoverWindow = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 60, 20)
                                               styleMask:NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel
@@ -212,7 +262,7 @@
         _hoverWindow.appearance = self.effectiveAppearance;
         [self.effectiveAppearance performAsCurrentDrawingAppearance:^{
             contentView.layer.backgroundColor =
-                [NSColor.controlBackgroundColor colorWithAlphaComponent:0.95].CGColor;
+                [NSColor.VLCSurfaceBackgroundColor colorWithAlphaComponent:0.95].CGColor;
             contentView.layer.borderColor = NSColor.gridColor.CGColor;
         }];
         return;
@@ -221,12 +271,15 @@
         _hoverWindow.appearance = self.effectiveAppearance;
     }
     contentView.layer.backgroundColor =
-        [NSColor.controlBackgroundColor colorWithAlphaComponent:0.95].CGColor;
+        [NSColor.VLCSurfaceBackgroundColor colorWithAlphaComponent:0.95].CGColor;
     contentView.layer.borderColor = NSColor.gridColor.CGColor;
 }
 
 - (void)hideHoverWindow
 {
+    _hovering = NO;
+    [self cancelPreviewRequest];
+    _hoverImage.image = nil; _hoverImage.hidden = YES;
     if (_hoverWindow == nil) {
         return;
     }
@@ -250,13 +303,16 @@
     [_hoverLabel sizeToFit];
 
     const NSSize textSize = _hoverLabel.frame.size;
-    const CGFloat horizontalPadding = 6.0;
-    const CGFloat verticalPadding = 2.0;
-    const CGFloat verticalGap = 6.0;
-    const NSSize windowSize = NSMakeSize(textSize.width + horizontalPadding * 2.0,
-                                         textSize.height + verticalPadding * 2.0);
+    const CGFloat horizontalPadding = 10.0;
+    const CGFloat verticalPadding = 10.0;
+    const CGFloat verticalGap = 10.0;
+    const BOOL imageAvailable = _hoverImage.image != nil;
+    const NSSize windowSize = NSMakeSize(imageAvailable ? 272 : textSize.width + horizontalPadding * 2.0,
+                                         imageAvailable ? 189 : textSize.height + verticalPadding * 2.0);
     _hoverLabel.frame = NSMakeRect(horizontalPadding, verticalPadding,
-                                   textSize.width, textSize.height);
+                                   windowSize.width - horizontalPadding * 2, textSize.height);
+    _hoverImage.hidden = !imageAvailable;
+    if (imageAvailable) _hoverImage.frame = NSMakeRect(10, 37, 252, 142);
 
     const NSRect sliderOnScreen =
         [parentWindow convertRectToScreen:[self convertRect:self.bounds toView:nil]];
@@ -299,8 +355,50 @@
     }
 
     const vlc_tick_t time = (vlc_tick_t)(fraction * self.mediaDuration);
+    _hovering = YES; _hoverX = locationInSelf.x; _hoverTime = time;
+    _hoverImage.image = nil;
     [self showHoverAtSliderX:locationInSelf.x time:time];
+    [self cancelPreviewRequest];
+    if (!_interfaceTerminating) _previewTimer = [NSTimer scheduledTimerWithTimeInterval:.12 target:self selector:@selector(requestSeekPreview:) userInfo:nil repeats:NO];
 }
+
+- (void)cancelPreviewRequest
+{
+    ++_previewGeneration;
+    [_previewTimer invalidate]; _previewTimer = nil;
+    VLCSeekPreviewRequest *request = _previewRequest; _previewRequest = nil;
+    vlc_preparser_t *thumbnailer = getThumbnailer();
+    if (request.request && thumbnailer) vlc_preparser_Cancel(thumbnailer, request.request);
+}
+
+- (void)requestSeekPreview:(NSTimer *)timer
+{
+    _previewTimer = nil;
+    if (_interfaceTerminating || !_hovering) return;
+    VLCPlayerController *player = VLCMain.sharedInstance.playQueueController.playerController;
+    vlc_preparser_t *thumbnailer = getThumbnailer();
+    if (!thumbnailer || !player.activeVideoPlayback || !player.currentMedia.vlcInputItem) return;
+    VLCSeekPreviewRequest *request = [[VLCSeekPreviewRequest alloc] init];
+    request.slider = self; request.generation = _previewGeneration;
+    void *context = CFBridgingRetain(request);
+    const struct vlc_thumbnailer_arg arguments = { .seek = {.type = VLC_THUMBNAILER_SEEK_TIME, .time = _hoverTime, .speed = VLC_THUMBNAILER_SEEK_FAST}, .hw_dec = false };
+    static const struct vlc_thumbnailer_cbs callbacks = { .on_ended = seekPreviewEnded };
+    request.request = vlc_preparser_req_NewThumbnail(thumbnailer, player.currentMedia.vlcInputItem, &arguments, &callbacks, context);
+    if (request.request && vlc_preparser_Submit(thumbnailer, request.request) == VLC_SUCCESS) { _previewRequest = request; return; }
+    if (request.request) vlc_preparser_req_Release(request.request);
+    CFBridgingRelease(context);
+}
+
+- (void)receivePreview:(NSImage *)image request:(VLCSeekPreviewRequest *)request
+{
+    if (_previewRequest == request) _previewRequest = nil;
+    if (_interfaceTerminating || !_hovering || request.generation != _previewGeneration || !image) return;
+    _hoverImage.image = image;
+    [self showHoverAtSliderX:_hoverX time:_hoverTime];
+}
+
+- (void)previewMediaChanged:(NSNotification *)notification { [self hideHoverWindow]; }
+- (void)interfaceWillTerminate:(NSNotification *)notification { _interfaceTerminating = YES; [self hideHoverWindow]; }
 
 - (void)mouseEntered:(NSEvent *)event
 {

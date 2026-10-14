@@ -26,18 +26,35 @@ import VLC.Style
 import VLC.Widgets as Widgets
 import VLC.Util
 
-// FIXME: Keyboard navigation needs to be fixed for this Popup.
 T.Popup {
     id: root
 
     // Settings
-    property var preferredWidth : stackView.currentItem.preferredWidth
+    property var preferredWidth: stackView.currentItem?.preferredWidth ?? VLCStyle.dp(400, VLCStyle.scale)
+    property int initialTab: 0
+    readonly property bool sideAligned: parent.width >= preferredWidth * 2
+    readonly property real panelTop: parent.playerSettingsTop ?? VLCStyle.margin_small
+    readonly property real panelBottom: parent.playerControlsY ?? parent.positionSliderY ?? parent.height
 
-    width: Math.min((typeof preferredWidth !== "undefined")
-                          ? preferredWidth : Number.MAX_VALUE
-                    , root.parent.width)
+    width: sideAligned ? Math.min(preferredWidth, parent.width - VLCStyle.margin_small * 2)
+                       : Math.max(0, parent.width - VLCStyle.margin_small * 2)
 
-    height: VLCStyle.dp(296, VLCStyle.scale)
+    height: Math.max(0, sideAligned ? panelBottom - panelTop - VLCStyle.margin_small
+                                  : Math.min(VLCStyle.dp(360, VLCStyle.scale),
+                                             (panelBottom - panelTop - VLCStyle.margin_small) * 0.65))
+    padding: 0
+    modal: false
+    dim: false
+
+    onAboutToShow: {
+        // Build the initial page without an opacity animation while its
+        // Popup is still hidden. The render-thread animator can otherwise
+        // leave the actual opened page invisible on a software scene graph.
+        stackView.clear(T.StackView.Immediate)
+        stackView.push(tracksPageComponent, {}, T.StackView.Immediate)
+        if (stackView.currentItem)
+            stackView.currentItem.opacity = 1
+    }
 
     // Animations
 
@@ -56,17 +73,10 @@ T.Popup {
     }
 
     background: Rectangle {
-        // NOTE: The opacity should be stronger on a light background for readability.
-        color: popupTheme.bg.primary.alpha(popupTheme.palette.isDark ? 0.8 : 0.96)
-
-        Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-
-            height: VLCStyle.margin_xxxsmall
-
-            color: popupTheme.border
-        }
+        color: popupTheme.bg.primary
+        radius: VLCStyle.dp(10, VLCStyle.scale)
+        border.width: VLCStyle.dp(1, VLCStyle.scale)
+        border.color: popupTheme.border
     }
 
     contentItem: T.StackView {
@@ -83,33 +93,35 @@ T.Popup {
             palette: popupTheme.palette
         }
 
-        initialItem: TracksListPage {
-            trackMenuController: trackMenuController
-        }
+        initialItem: tracksPageComponent
 
         pushEnter: Transition {
-            OpacityAnimator {
+            NumberAnimation {
+                property: "opacity"
                 from: 0
                 to: 1
                 duration: VLCStyle.duration_long
             }
         }
         pushExit: Transition {
-            OpacityAnimator {
+            NumberAnimation {
+                property: "opacity"
                 from: 1
                 to: 0
                 duration: VLCStyle.duration_long
             }
         }
         popEnter: Transition {
-            OpacityAnimator {
+            NumberAnimation {
+                property: "opacity"
                 from: 0
                 to: 1
                 duration: VLCStyle.duration_long
             }
         }
         popExit: Transition {
-            OpacityAnimator {
+            NumberAnimation {
+                property: "opacity"
                 from: 1
                 to: 0
                 duration: VLCStyle.duration_long
@@ -117,28 +129,38 @@ T.Popup {
         }
     }
 
+    Component {
+        id: tracksPageComponent
+        TracksListPage { trackMenuController: menuController }
+    }
+
     QtObject {
-      id: trackMenuController
+      id: menuController
+
+      readonly property int initialTab: root.initialTab
 
       signal requestAudioPage()
       signal requestSubtitlePage()
       signal requestPlaybackSpeedPage()
       signal requestBack()
+      signal requestClose()
+
+      onRequestClose: root.close()
 
       onRequestBack: {
           stackView.pop()
       }
 
       onRequestAudioPage: {
-          stackView.push("qrc:///qt/qml/VLC/Player/TracksPageAudio.qml", {"trackMenuController": trackMenuController})
+          stackView.push("qrc:///qt/qml/VLC/Player/TracksPageAudio.qml", {"trackMenuController": menuController})
       }
 
       onRequestSubtitlePage: {
-          stackView.push("qrc:///qt/qml/VLC/Player/TracksPageSubtitle.qml", {"trackMenuController": trackMenuController})
+          stackView.push("qrc:///qt/qml/VLC/Player/TracksPageSubtitle.qml", {"trackMenuController": menuController})
       }
 
       onRequestPlaybackSpeedPage: {
-          stackView.push("qrc:///qt/qml/VLC/Player/TracksPageSpeed.qml", {"trackMenuController": trackMenuController})
+          stackView.push("qrc:///qt/qml/VLC/Player/TracksPageSpeed.qml", {"trackMenuController": menuController})
       }
     }
 }

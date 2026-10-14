@@ -16,6 +16,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
  *****************************************************************************/
 import QtQuick
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import QtQml.Models
 
@@ -45,7 +46,7 @@ Item {
 
     ColumnLayout{
         anchors.fill: parent
-        spacing: 0
+        spacing: MainCtx.dp(16, VLCStyle.scale)
 
         TabBar {
             id: bar
@@ -84,25 +85,25 @@ Item {
         }
 
         Item {
-            Layout.preferredHeight: VLCStyle.controlLayoutHeight * 1.5
+            Layout.preferredHeight: MainCtx.dp(72, VLCStyle.scale)
             Layout.fillWidth: true
 
             TextMetrics {
                 id: leftMetric
                 text: qsTr("L   E   F   T")
-                font.pixelSize: VLCStyle.fontSize_xxlarge
+                font.pixelSize: VLCStyle.fontSize_normal
             }
 
             TextMetrics {
                 id: centerMetric
                 text: qsTr("C   E   N   T   E   R")
-                font.pixelSize: VLCStyle.fontSize_xxlarge
+                font.pixelSize: VLCStyle.fontSize_normal
             }
 
             TextMetrics {
                 id: rightMetric
                 text: qsTr("R   I   G   H   T")
-                font.pixelSize: VLCStyle.fontSize_xxlarge
+                font.pixelSize: VLCStyle.fontSize_normal
             }
 
             Repeater {
@@ -190,7 +191,8 @@ Item {
                             readonly property int count: item?.count ?? 0
 
                             sourceComponent: Rectangle {
-                                color: theme.bg.primary
+                                color: theme.bg.secondary
+                                radius: MainCtx.dp(4, VLCStyle.scale)
 
                                 border.color: theme.border
                                 border.width: VLCStyle.border
@@ -239,7 +241,7 @@ Item {
 
                                         text: repeater.getMetric(index).text
                                         verticalAlignment: Text.AlignVCenter
-                                        font.pixelSize: VLCStyle.fontSize_xxlarge
+                                        font.pixelSize: VLCStyle.fontSize_normal
                                         color: theme.fg.secondary
                                         horizontalAlignment: Text.AlignHCenter
                                         visible: (count === 0)
@@ -258,6 +260,7 @@ Item {
             Layout.topMargin: VLCStyle.margin_xxsmall
 
             color: buttonList.colorContext.bg.primary
+            radius: MainCtx.dp(4, VLCStyle.scale)
             border.color: theme.border
             border.width: VLCStyle.border
             border.pixelAligned: (radius < Number.EPSILON)
@@ -265,10 +268,17 @@ Item {
             ColumnLayout {
                 anchors.fill: parent
 
-                Widgets.MenuCaption {
-                    Layout.margins: VLCStyle.margin_xxsmall
-                    text: qsTr("Drag items below to add them above: ")
-                    color: buttonList.colorContext.fg.primary
+                Text {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: MainCtx.dp(14, VLCStyle.scale)
+                    Layout.rightMargin: MainCtx.dp(14, VLCStyle.scale)
+                    Layout.topMargin: MainCtx.dp(12, VLCStyle.scale)
+                    Layout.bottomMargin: MainCtx.dp(12, VLCStyle.scale)
+                    // The original drop paths support both adding and removal.
+                    text: qsTr("Drag items around and out of the box below to re-order them. Drag items into the box to remove them from the player.")
+                    color: buttonList.colorContext.fg.secondary
+                    font.pixelSize: VLCStyle.fontSize_normal
+                    wrapMode: Text.WordWrap
                 }
 
                 ToolbarEditorButtonList {
@@ -276,7 +286,10 @@ Item {
 
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    Layout.margins: VLCStyle.margin_xxsmall
+                    Layout.leftMargin: MainCtx.dp(14, VLCStyle.scale)
+                    Layout.rightMargin: MainCtx.dp(14, VLCStyle.scale)
+                    Layout.topMargin: MainCtx.dp(22, VLCStyle.scale)
+                    Layout.bottomMargin: MainCtx.dp(34, VLCStyle.scale)
 
                     Component.onCompleted: {
                         controlDragStarted.connect(root.dragStarted)

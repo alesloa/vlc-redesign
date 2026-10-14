@@ -175,7 +175,8 @@
     } else if (([o_event type] == NSEventTypeRightMouseDown) ||
                (([o_event type] == NSEventTypeLeftMouseDown) &&
                ([o_event modifierFlags] &  NSEventModifierFlagControl))) {
-        [NSMenu popUpContextMenu: VLCMain.sharedInstance.mainMenu.voutMenu withEvent: o_event forView: self];
+        [self showVideoContextMenu:o_event];
+        return;
     }
 
     [super mouseDown: o_event];
@@ -183,6 +184,10 @@
 
 - (void)mouseUp:(NSEvent *)event
 {
+    if (event.type == NSEventTypeLeftMouseUp &&
+        (event.modifierFlags & NSEventModifierFlagControl)) {
+        return;
+    }
     if (event.type == NSEventTypeLeftMouseUp) {
         vlc_mutex_lock(&_mutex);
         if (_wnd) {
@@ -195,20 +200,24 @@
 }
 
 
-- (void)rightMouseDown:(NSEvent *)o_event
+- (void)showVideoContextMenu:(NSEvent *)event
 {
-	    if ([o_event type] == NSEventTypeRightMouseDown)
-	        [NSMenu popUpContextMenu: VLCMain.sharedInstance.mainMenu.voutMenu withEvent: o_event forView: self];
-
-    [super mouseDown: o_event];
+    // A video view can detach as playback changes. Only anchor menus to a live native window.
+    NSMenu *menu = VLCMain.sharedInstance.mainMenu.voutMenu;
+    if (self.window == nil || menu == nil || menu.numberOfItems == 0) return;
+    [NSMenu popUpContextMenu:menu withEvent:event forView:self];
 }
 
-- (void)rightMouseUp:(NSEvent *)o_event
+- (void)rightMouseDown:(NSEvent *)event
 {
-	    if ([o_event type] == NSEventTypeRightMouseUp)
-	        [NSMenu popUpContextMenu: VLCMain.sharedInstance.mainMenu.voutMenu withEvent: o_event forView: self];
+    if (event.type == NSEventTypeRightMouseDown) [self showVideoContextMenu:event];
+    else [super rightMouseDown:event];
+}
 
-    [super mouseUp: o_event];
+- (void)rightMouseUp:(NSEvent *)event
+{
+    // The context menu opens once on mouse-down; releasing/dismissing it must not open it again.
+    [super rightMouseUp:event];
 }
 
 - (void)mouseMoved:(NSEvent *)event

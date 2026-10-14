@@ -27,6 +27,7 @@
 @class VLCTextfieldPanelController;
 
 @interface VLCVideoEffectsWindowController : NSWindowController
+- (void)refreshCurrentValues;
 
 /* generic */
 @property (readwrite, weak) IBOutlet NSSegmentedControl *segmentView;

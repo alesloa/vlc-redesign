@@ -29,12 +29,16 @@
 #import "VLCAudioEffectsWindowController.h"
 
 #import <vlc_common.h>
+#import <vlc_configuration.h>
+#import <vlc_modules.h>
+#import <vlc_plugin.h>
 #import <math.h>
 
 #import "../../../audio_filter/equalizer_presets.h"
 
 #import "extensions/NSString+Helpers.h"
 #import "extensions/NSView+VLCAdditions.h"
+#import "views/VLCPlayerEffectsView.h"
 #import "main/VLCMain.h"
 #import "main/CompatibilityFixes.h"
 #import "panels/dialogs/VLCPopupPanelController.h"
@@ -61,6 +65,8 @@ static inline void enableTextField(NSTextField *const __unsafe_unretained textFi
     VLCPlayerController *_playerController;
     VLCPopupPanelController *_popupPanel;
     VLCTextfieldPanelController *_textfieldPanel;
+    NSView *_legacyEffectsContent;
+    VLCPlayerEffectsView *_redesignEffectsView;
 }
 @end
 
@@ -167,7 +173,7 @@ static inline void enableTextField(NSTextField *const __unsafe_unretained textFi
     aout_EnableFilter(p_aout, "normvol", false);
     aout_EnableFilter(p_aout, "karaoke", false);
     aout_EnableFilter(p_aout, "scaletempo_pitch", false);
-    aout_EnableFilter(p_aout, "stereo_pan", false);
+    aout_EnableFilter(p_aout, "stereopan", false);
   
     /* fetch preset */
     NSString *profileString;
@@ -314,7 +320,11 @@ static inline void enableTextField(NSTextField *const __unsafe_unretained textFi
     [self resetAudioFilters];
     [self resetProfileSelector];
     [self resetAdvanced];
-
+    // Retain the original nib tree: its outlets and action sender identities
+    // remain the authoritative effects controls behind the new presentation.
+    _legacyEffectsContent = self.window.contentView;
+    _redesignEffectsView = [[VLCPlayerEffectsView alloc] initWithEffectsController:self audio:YES includeProfileControls:YES];
+    [_redesignEffectsView installInWindow:self.window];
 }
 
 - (void)dealloc
@@ -386,6 +396,8 @@ static inline void enableTextField(NSTextField *const __unsafe_unretained textFi
     if ([self.window isKeyWindow])
         [self.window orderOut:sender];
     else {
+        [self refreshCurrentValues];
+        [_redesignEffectsView refreshControls];
         [self.window setLevel: VLCMain.sharedInstance.voutProvider.currentStatusWindowLevel];
         [self.window makeKeyAndOrderFront:sender];
     }
@@ -688,10 +700,15 @@ static bool GetEqualizerStatus(intf_thread_t *__unused p_custom_intf,
     audio_output_t *p_aout = [_playerController mainAudioOutput];
 
     NSString *currentPreset = nil;
+    NSString *currentBands = nil;
+    float currentPreamp = 0;
     if (p_aout) {
         char *psz_preset_string = var_GetNonEmptyString(p_aout, "equalizer-preset");
         currentPreset = toNSStr(psz_preset_string);
         free(psz_preset_string);
+        char *bands=var_GetString(p_aout,"equalizer-bands");
+        currentBands=bands ? toNSStr(bands) : nil; free(bands);
+        currentPreamp=var_GetFloat(p_aout,"equalizer-preamp");
         aout_Release(p_aout);
     }
 
@@ -704,10 +721,56 @@ static bool GetEqualizerStatus(intf_thread_t *__unused p_custom_intf,
     }
 
     [_equalizerPresetsPopup selectItemAtIndex:currentPresetIndex];
-    [self equalizerChangePreset:_equalizerPresetsPopup];
+    // Populate the GUI without invoking the user-selection action. The active
+    // output may contain custom gains that differ from its named preset.
+    if(currentBands != nil) {
+        [_equalizerPreampSlider setFloatValue:currentPreamp];
+        NSArray *bands=[[currentBands componentsSeparatedByCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NSString *gain,NSDictionary *bindings){return gain.length>0;}]];
+        if(!bands.count) [self setBandSliderValuesForPreset:currentPresetIndex];
+        else for(NSUInteger index=0;index<MIN((NSUInteger)EQZ_BANDS_MAX,bands.count);index++) [[self valueForKey:[NSString stringWithFormat:@"equalizerBand%luSlider",(unsigned long)index+1]] setFloatValue:[bands[index] floatValue]];
+    } else {
+        [_equalizerPreampSlider setFloatValue:[[[defaults objectForKey:VLCAudioEffectsEqualizerPreampValuesKey] objectAtIndex:currentPresetIndex] floatValue]];
+        [self setBandSliderValuesForPreset:currentPresetIndex];
+    }
+}
 
-    [_equalizerPreampSlider setFloatValue:[[[defaults objectForKey:VLCAudioEffectsEqualizerPreampValuesKey] objectAtIndex:currentPresetIndex] floatValue]];
-    [self setBandSliderValuesForPreset:currentPresetIndex];
+- (void)refreshCurrentValues
+{
+    [self equalizerUpdated]; [self resetCompressor]; [self resetSpatializer];
+    [self resetAudioFilters]; [self resetAdvanced];
+}
+
+- (BOOL)redesignHasAudioOutput
+{
+    audio_output_t *output=[_playerController mainAudioOutput];
+    if(output)aout_Release(output);
+    return output!=NULL;
+}
+
+- (NSNumber *)redesignStereoValueForOption:(NSString *)option
+{
+    // Source: stereo_widen.c's four original float configuration descriptors
+    // and its existing callbacks on the player audio output.
+    if(![@[@"stereowiden-delay",@"stereowiden-feedback",@"stereowiden-crossfeed",@"stereowiden-dry-mix"] containsObject:option])return nil;
+    const module_config_t *metadata=config_FindConfig(option.UTF8String);
+    if(!metadata||!IsConfigFloatType(metadata->i_type)||!module_exists("stereo_widen"))return nil;
+    audio_output_t *output=[_playerController mainAudioOutput];
+    double value=output?var_CreateGetFloat(output,option.UTF8String):config_GetFloat(option.UTF8String);
+    if(output)aout_Release(output);
+    return @(value);
+}
+
+- (BOOL)redesignSetStereoValue:(double)value forOption:(NSString *)option
+{
+    if(![@[@"stereowiden-delay",@"stereowiden-feedback",@"stereowiden-crossfeed",@"stereowiden-dry-mix"] containsObject:option])return NO;
+    const module_config_t *metadata=config_FindConfig(option.UTF8String);
+    if(!metadata||!IsConfigFloatType(metadata->i_type)||!module_exists("stereo_widen")||!isfinite(value)||value<metadata->min.f||value>metadata->max.f)return NO;
+    audio_output_t *output=[_playerController mainAudioOutput];
+    if(!output)return NO;
+    var_Create(output,option.UTF8String,VLC_VAR_FLOAT|VLC_VAR_DOINHERIT);
+    int result=var_SetFloat(output,option.UTF8String,value);
+    aout_Release(output);
+    return result==VLC_SUCCESS;
 }
 
 - (void)equalizerUpdated
@@ -1236,7 +1299,7 @@ static bool GetEqualizerStatus(intf_thread_t *__unused p_custom_intf,
     psz_afilters = var_InheritString(p_aout, "audio-filter");
     if (psz_afilters) {
         bEnable_pitch = strstr(psz_afilters, "scaletempo_pitch") != NULL;
-        bEnable_pan = strstr(psz_afilters, "stereo_pan") != NULL;
+        bEnable_pan = strstr(psz_afilters, "stereopan") != NULL;
         
         free(psz_afilters);
     }
@@ -1316,7 +1379,7 @@ static bool GetEqualizerStatus(intf_thread_t *__unused p_custom_intf,
     
     enableTextField(_advancedStereoPanTextField, newState);
     [_advancedStereoPanSlider setEnabled:newState];
-    [_playerController enableAudioFilterWithName:@"stereo_pan" state:newState];
+    [_playerController enableAudioFilterWithName:@"stereopan" state:newState];
 }
 
 @end

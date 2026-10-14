@@ -21,7 +21,7 @@
 *****************************************************************************/
 
 #import <Cocoa/Cocoa.h>
-#import "windows/video/VLCWindow.h"
+#import "windows/video/VLCVideoWindowCommon.h"
 
 @class VLCControlsBarCommon;
 @class VLCImageView;
@@ -31,7 +31,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface VLCDetachedAudioWindow : VLCWindow
+@interface VLCDetachedAudioWindow : VLCVideoWindowCommon
 
 @property (readonly) VLCMainVideoViewAudioMediaDecorativeView *decorativeView;
 @property (nonatomic, weak) IBOutlet VLCMainVideoViewOverlayView *overlayView;

@@ -30,6 +30,7 @@ import VLC.Widgets as Widgets
 
 TracksPage {
     id: root
+    initialFocusItem: spinBoxA
 
     // Functions
 
@@ -42,11 +43,11 @@ TracksPage {
     }
 
     function textFromValueB(value, locale) {
-        return qsTr("%1 fps").arg(Number(value / 10).toLocaleString(locale, 'f', 3))
+        return qsTr("%1 fps").arg(Number(value / 1000).toLocaleString(locale, 'f', 3))
     }
 
     function valueFromTextB(text, locale) {
-        return Number.fromLocaleString(locale, text.substring(0, text.length - 4)) * 10
+        return Number.fromLocaleString(locale, text.substring(0, text.length - 4)) * 1000
     }
 
     // Children
@@ -59,6 +60,11 @@ TracksPage {
 
         Widgets.SubtitleLabel {
             Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            wrapMode: Text.WordWrap
+            elide: Text.ElideNone
+            font.pixelSize: root.inlineMode ? VLCStyle.dp(14, VLCStyle.scale) : VLCStyle.fontSize_xxxlarge
+            font.weight: root.inlineMode ? Font.Normal : Font.Bold
 
             text: qsTr("Subtitle synchronization")
 
@@ -82,14 +88,22 @@ TracksPage {
                 }
             }
 
-            RowLayout {
+            GridLayout {
+                id: primaryDelayGrid
                 Layout.fillWidth: true
-
-                spacing: VLCStyle.margin_xsmall
+                Layout.minimumWidth: 0
+                columns: width >= primaryDelayCaption.implicitWidth + spinBoxA.implicitWidth + resetA.implicitWidth + columnSpacing * 2 ? 3 : 2
+                columnSpacing: VLCStyle.margin_xsmall
+                rowSpacing: VLCStyle.margin_xsmall
 
                 Widgets.MenuCaption {
+                    id: primaryDelayCaption
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    Layout.columnSpan: primaryDelayGrid.columns === 3 ? 1 : 2
                     Layout.alignment: Qt.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    elide: Text.ElideNone
 
                     text: qsTr("Primary subtitle delay")
 
@@ -102,6 +116,7 @@ TracksPage {
                     property bool update: false
 
                     Layout.preferredWidth: VLCStyle.dp(128, VLCStyle.scale)
+                    Layout.minimumWidth: 0
 
                     stepSize: 50
                     from: -10000
@@ -158,15 +173,37 @@ TracksPage {
                 }
             }
 
-            RowLayout {
+            Widgets.SliderExt {
+                id: delaySlider
                 Layout.fillWidth: true
+                from: -10000
+                to: 10000
+                stepSize: 50
+                Accessible.name: qsTr("Primary subtitle delay")
+                toolTipTextProvider: (value) => root.textFromValueA(value, Qt.locale())
+                onMoved: Player.subtitleDelayMS = Math.round(value)
+                Binding on value {
+                    when: !delaySlider.pressed
+                    restoreMode: Binding.RestoreNone
+                    value: Player.subtitleDelayMS
+                }
+                Navigation.parentItem: root
+                Navigation.upItem: spinBoxA
+                Navigation.downItem: voiceHeardA
+            }
 
+            GridLayout {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
                 Layout.alignment: Qt.AlignRight
-
-                spacing: VLCStyle.margin_small
+                columns: width >= voiceHeardA.implicitWidth + textSeenA.implicitWidth + columnSpacing ? 2 : 1
+                columnSpacing: VLCStyle.margin_small
+                rowSpacing: VLCStyle.margin_xsmall
 
                 Widgets.TrackDelayButton {
                     id: voiceHeardA
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
 
                     iconTxt: VLCIcons.check
                     text: qsTr("Voice Heard")
@@ -181,6 +218,8 @@ TracksPage {
 
                 Widgets.TrackDelayButton {
                     id: textSeenA
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
 
                     iconTxt: VLCIcons.check
                     text: qsTr("Text Seen")
@@ -211,14 +250,22 @@ TracksPage {
                 }
             }
 
-            RowLayout {
+            GridLayout {
+                id: secondaryDelayGrid
                 Layout.fillWidth: true
-
-                spacing: VLCStyle.margin_xsmall
+                Layout.minimumWidth: 0
+                columns: width >= secondaryDelayCaption.implicitWidth + spinBoxB.implicitWidth + resetB.implicitWidth + columnSpacing * 2 ? 3 : 2
+                columnSpacing: VLCStyle.margin_xsmall
+                rowSpacing: VLCStyle.margin_xsmall
 
                 Widgets.MenuCaption {
+                    id: secondaryDelayCaption
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    Layout.columnSpan: secondaryDelayGrid.columns === 3 ? 1 : 2
                     Layout.alignment: Qt.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    elide: Text.ElideNone
 
                     text: qsTr("Secondary subtitle delay")
 
@@ -231,6 +278,7 @@ TracksPage {
                     property bool update: false
 
                     Layout.preferredWidth: VLCStyle.dp(128, VLCStyle.scale)
+                    Layout.minimumWidth: 0
 
                     stepSize: 50
                     from: -10000
@@ -285,15 +333,37 @@ TracksPage {
                 }
             }
 
-            RowLayout {
+            Widgets.SliderExt {
+                id: secondaryDelaySlider
                 Layout.fillWidth: true
+                from: -10000
+                to: 10000
+                stepSize: 50
+                Accessible.name: qsTr("Secondary subtitle delay")
+                toolTipTextProvider: (value) => root.textFromValueA(value, Qt.locale())
+                onMoved: Player.secondarySubtitleDelayMS = Math.round(value)
+                Binding on value {
+                    when: !secondaryDelaySlider.pressed
+                    restoreMode: Binding.RestoreNone
+                    value: Player.secondarySubtitleDelayMS
+                }
+                Navigation.parentItem: root
+                Navigation.upItem: spinBoxB
+                Navigation.downItem: voiceHeardB
+            }
 
+            GridLayout {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
                 Layout.alignment: Qt.AlignRight
-
-                spacing: VLCStyle.margin_xsmall
+                columns: width >= voiceHeardB.implicitWidth + textSeenB.implicitWidth + columnSpacing ? 2 : 1
+                columnSpacing: VLCStyle.margin_xsmall
+                rowSpacing: VLCStyle.margin_xsmall
 
                 Widgets.TrackDelayButton {
                     id: voiceHeardB
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
 
                     text: qsTr("Voice Heard")
                     iconTxt: VLCIcons.check
@@ -308,6 +378,8 @@ TracksPage {
 
                 Widgets.TrackDelayButton {
                     id: textSeenB
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
 
                     text: qsTr("Text Seen")
                     iconTxt: VLCIcons.check
@@ -322,17 +394,25 @@ TracksPage {
             }
         }
 
-        RowLayout {
+        GridLayout {
+            id: subtitleSpeedGrid
             Layout.fillWidth: true
-
-            spacing: VLCStyle.margin_xsmall
+            Layout.minimumWidth: 0
+            columns: width >= subtitleSpeedCaption.implicitWidth + spinBoxC.implicitWidth + resetC.implicitWidth + columnSpacing * 2 ? 3 : 2
+            columnSpacing: VLCStyle.margin_xsmall
+            rowSpacing: VLCStyle.margin_xsmall
 
             Accessible.role: Accessible.Grouping
             Accessible.name: qsTr("Subtitle Speed")
 
             Widgets.MenuCaption {
+                id: subtitleSpeedCaption
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                Layout.columnSpan: subtitleSpeedGrid.columns === 3 ? 1 : 2
                 Layout.alignment: Qt.AlignHCenter
+                wrapMode: Text.WordWrap
+                elide: Text.ElideNone
 
                 text: qsTr("Subtitle Speed")
 
@@ -345,10 +425,14 @@ TracksPage {
                 property bool update: false
 
                 Layout.preferredWidth: VLCStyle.dp(128, VLCStyle.scale)
+                Layout.minimumWidth: 0
 
-                stepSize: 1
+                // Source: sub-fps defaults to 0 (automatic); SyncControls uses
+                // a 100 fps maximum, three decimals, and a 0.2 fps step.
+                // Keep integer SpinBox units in thousandths.
+                stepSize: 200
                 from: 0
-                to: 100
+                to: 100000
 
                 textFromValue: root.textFromValueB
                 valueFromText: root.valueFromTextB
@@ -357,7 +441,7 @@ TracksPage {
                 Navigation.rightItem: resetC
 
                 Component.onCompleted: {
-                    value = Player.subtitleFPS * 10
+                    value = Player.subtitleFPS * 1000
 
                     update = true
                 }
@@ -366,16 +450,16 @@ TracksPage {
                     if (update === false)
                         return
 
-                    Player.subtitleFPS = value / 10
+                    Player.subtitleFPS = value / 1000
                 }
 
                 Connections {
                     target: Player
 
-                    function onSecondarySubtitleDelayChanged() {
+                    function onSubtitleFPSChanged() {
                         spinBoxC.update = false
 
-                        value = Player.subtitleFPS / 10
+                        spinBoxC.value = Player.subtitleFPS * 1000
 
                         spinBoxC.update = true
                     }
@@ -387,7 +471,7 @@ TracksPage {
 
                 text: qsTr("Reset")
 
-                onClicked: spinBoxC.value = 10
+                onClicked: spinBoxC.value = 0
 
                 Navigation.parentItem: root
                 Navigation.leftItem: spinBoxC

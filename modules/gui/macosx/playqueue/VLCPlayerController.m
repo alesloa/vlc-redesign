@@ -1509,6 +1509,31 @@ static int BossCallback(vlc_object_t *p_this,
 
 }
 
+- (vlc_es_id_t *)secondarySubtitleESID
+{
+    // Called while the existing player lock is held; the borrowed ID stays valid.
+    size_t count=vlc_player_GetTrackCount(_p_player, SPU_ES);
+    for(size_t index=0;index<count;index++) {
+        const struct vlc_player_track *track=vlc_player_GetTrackAt(_p_player, SPU_ES, index);
+        if(!track || !track->selected) continue;
+        enum vlc_vout_order order;
+        if(vlc_player_GetEsIdVout(_p_player, track->es_id, &order) && order==VLC_VOUT_ORDER_SECONDARY) return track->es_id;
+    }
+    return NULL;
+}
+- (vlc_tick_t)secondarySubtitlesDelay
+{
+    vlc_player_Lock(_p_player); vlc_es_id_t *identifier=[self secondarySubtitleESID];
+    vlc_tick_t value=identifier ? vlc_player_GetEsIdDelay(_p_player, identifier) : 0;
+    vlc_player_Unlock(_p_player); return value;
+}
+- (void)setSecondarySubtitlesDelay:(vlc_tick_t)value
+{
+    vlc_player_Lock(_p_player); vlc_es_id_t *identifier=[self secondarySubtitleESID];
+    if(identifier) vlc_player_SetEsIdDelay(_p_player, identifier, value, VLC_PLAYER_WHENCE_ABSOLUTE);
+    vlc_player_Unlock(_p_player);
+}
+
 - (vlc_tick_t)delayForElementaryStreamID:(vlc_es_id_t *)esID
 {
     vlc_player_Lock(_p_player);

@@ -22,6 +22,7 @@
 #include <QPointF>
 #include <QQuickItem>
 #include <QString>
+#include <QUrl>
 #include <QtQml>
 
 class PointingToolTipAttached : public QObject
@@ -37,6 +38,7 @@ class PointingToolTipAttached : public QObject
     Q_PROPERTY(QPointF pos MEMBER m_pos WRITE setPos NOTIFY posChanged FINAL)
     Q_PROPERTY(bool visible MEMBER m_visible WRITE setVisible NOTIFY visibleChanged FINAL)
     Q_PROPERTY(QString text MEMBER m_text WRITE setText NOTIFY textChanged FINAL)
+    Q_PROPERTY(QUrl imageSource MEMBER m_imageSource WRITE setImageSource NOTIFY imageSourceChanged FINAL)
 
     // The name `PointingToolTip` is not used to not conflict with the already existing type.
     QML_NAMED_ELEMENT(PointingToolTipAttached)
@@ -52,12 +54,14 @@ public:
             m_posProperty.reset();
             m_visibleProperty.reset();
             m_textProperty.reset();
+            m_imageSourceProperty.reset();
             m_parentProperty.reset();
 
             if (m_instance)
             {
                 setPos(m_pos);
                 setText(m_text);
+                setImageSource(m_imageSource);
                 setVisible(m_visible);
             }
         });
@@ -106,6 +110,22 @@ public:
         }
     }
 
+    void setImageSource(const QUrl& source)
+    {
+        if (m_imageSource != source)
+        {
+            m_imageSource = source;
+            emit imageSourceChanged();
+        }
+        if (instanceBoundToParent())
+        {
+            if (!m_imageSourceProperty)
+                m_imageSourceProperty = QQmlProperty(m_instance, QStringLiteral("imageSource"));
+            assert(m_imageSourceProperty->isWritable());
+            m_imageSourceProperty->write(source);
+        }
+    }
+
     // Setting visibility binds the attached tool tip to the parent of the
     // attached tool tip:
     void setVisible(bool visible)
@@ -135,6 +155,9 @@ public:
 
             setPos(m_pos);
             setText(m_text);
+            // Empty is the default for every other tooltip owner, so a seek
+            // frame cannot leak into another control's text-only tooltip.
+            setImageSource(m_imageSource);
 
             m_visibleProperty->write(true);
         }
@@ -152,6 +175,7 @@ signals:
     void posChanged();
     void visibleChanged();
     void textChanged();
+    void imageSourceChanged();
 
 protected:
     bool instanceBoundToParent() const
@@ -172,10 +196,12 @@ private:
     QPointF m_pos;
     bool m_visible = false;
     QString m_text;
+    QUrl m_imageSource;
 
     std::optional<QQmlProperty> m_posProperty;
     std::optional<QQmlProperty> m_visibleProperty;
     std::optional<QQmlProperty> m_textProperty;
+    std::optional<QQmlProperty> m_imageSourceProperty;
     mutable std::optional<QQmlProperty> m_parentProperty;
 };
 

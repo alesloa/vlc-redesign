@@ -51,6 +51,7 @@ FocusScope{
     property bool showCSD: false
     property bool showToolbar: false
     property bool pinControls: false
+    property bool libraryVisible: false
 
     readonly property ColorContext colorContext: ColorContext {
         id: theme
@@ -59,7 +60,7 @@ FocusScope{
 
     // Private
 
-    property bool _showTopBar: (pinControls === false || showToolbar === false)
+    property bool _showTopBar: true
 
     property bool _showCenterText: (pinControls && showToolbar === false && showCSD)
 
@@ -67,13 +68,12 @@ FocusScope{
 
     // Aliases
 
-    property alias resumeVisible: resumeDialog.visible
-
     property alias playlistVisible: playlistButton.checked
 
     // Signals
 
     signal togglePlaylistVisibility()
+    signal toggleLibraryVisibility()
     signal requestLockUnlockAutoHide(bool lock)
     signal backRequested()
 
@@ -138,9 +138,6 @@ FocusScope{
             //csdDecorations.implicitHeight gets overwritten when the height is set,
             //VLCStyle.icon_normal is its initial value
             const lineHeight = Math.max(logoOrResume.implicitHeight, playlistGroup.implicitHeight, VLCStyle.icon_normal)
-
-            centerTitleText.y = 0
-            centerTitleText.height = lineHeight
 
             csdDecorations.height  = lineHeight
 
@@ -243,22 +240,8 @@ FocusScope{
         anchors.top: root.top
         anchors.leftMargin:  root._sideMargin
 
-        implicitWidth: resumeVisible ? resumeDialog.implicitWidth
-                                     : logoGroup.implicitWidth
-
-        implicitHeight: {
-            if (root.resumeVisible) {
-                // Only if there are multiple lines use `resumeDialog`'s implicit height, otherwise the video
-                // window may get resized by few pixels unnecessarily when `resumeDialog` is no longer visible.
-                if (resumeDialog.implicitHeight >= (logoGroup.implicitHeight + resumeDialog.baselineOffset))
-                    return resumeDialog.implicitHeight
-                else
-                    return logoGroup.implicitHeight
-            } else if (_showTopBar)
-                return logoGroup.implicitHeight
-            else
-                return 0
-        }
+        implicitWidth: logoGroup.implicitWidth
+        implicitHeight: root._showTopBar ? logoGroup.implicitHeight : 0
 
         onImplicitHeightChanged: root._layout()
 
@@ -267,10 +250,11 @@ FocusScope{
 
             anchors.fill: parent
 
-            visible: (root._showTopBar && root.resumeVisible === false)
+            visible: root._showTopBar
 
             implicitHeight: VLCStyle.icon_banner + VLCStyle.margin_xxsmall * 2
             implicitWidth: backBtn.implicitWidth + logo.implicitWidth + VLCStyle.margin_xxsmall
+                           + (libraryButton.visible ? libraryButton.implicitWidth + VLCStyle.margin_xxsmall : 0)
 
             Widgets.IconToolButton {
                 id: backBtn
@@ -303,99 +287,48 @@ FocusScope{
 
                 color: theme.accent
             }
-        }
 
-        ResumeDialog {
-            id: resumeDialog
-
-            anchors.fill: parent
-            //add aditional margin so it align with menubar text when visible (see MenuBar.qml)
-            anchors.leftMargin: VLCStyle.margin_xsmall
-
-            maxWidth: ((root.showCSD && !root.pinControls) ? csdDecorations : playlistGroup).x
-                - VLCStyle.applicationHorizontalMargin
-                - VLCStyle.margin_large
-
-            colorContext.palette: theme.palette
-
-            Navigation.parentItem: rootPlayer
-
-            onHidden: {
-                if (activeFocus) {
-                    backBtn.forceActiveFocus()
-                }
-            }
-
-            onVisibleChanged: {
-                root.requestLockUnlockAutoHide(visible)
+            Widgets.IconToolButton {
+                id: libraryButton
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: logo.right
+                anchors.leftMargin: VLCStyle.margin_xxsmall
+                text: VLCIcons.home
+                iconSource: "qrc:///redesign/icons/folder.svg"
+                mirrorIcon: true
+                description: qsTr("Media library")
+                checked: root.libraryVisible
+                visible: MainCtx.mediaLibraryAvailable
+                onClicked: root.toggleLibraryVisibility()
+                onHoveredChanged: root.requestLockUnlockAutoHide(hovered)
+                Navigation.parentItem: root
+                Navigation.leftItem: backBtn
+                Navigation.rightItem: menuSelector
             }
         }
+
     }
 
-    //FIXME use the the right class
     T.Label {
         id: centerTitleText
 
-        readonly property int _leftLimit: logoOrResume.x + logoOrResume.width
-        readonly property int _rightLimit: playlistGroup.x
-        readonly property int _availableWidth: _rightLimit - _leftLimit
-        readonly property int _centerX: ((root.width - centerTitleText.implicitWidth) / 2)
-        readonly property bool _alignHCenter: _centerX > _leftLimit
-                                              && _centerX + centerTitleText.implicitWidth < _rightLimit
-
-        visible: (_showCenterText && root.resumeVisible === false)
-
+        // The Figma header centers the real media title. Equal margins reserve
+        // both action groups, so long titles elide without covering a button.
+        readonly property real balancedMargin: Math.max(logoOrResume.x + logoGroup.implicitWidth,
+                                                       root.width - playlistGroup.x) + VLCStyle.margin_small
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: logoOrResume.top
+        width: Math.max(0, root.width - balancedMargin * 2)
+        height: logoOrResume.height
+        visible: root._showTopBar
         enabled: visible
-
-        width: Math.min(centerTitleText._availableWidth, centerTitleText.implicitWidth)
-
-        leftPadding: VLCStyle.margin_small
-        rightPadding: VLCStyle.margin_small
-
         text: root.title
         color: theme.fg.primary
         font.pixelSize: VLCStyle.dp(13, VLCStyle.scale)
         font.weight: Font.DemiBold
         elide: Text.ElideRight
+        horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
-
-        on_AlignHCenterChanged: _layout()
-        Component.onCompleted: _layout()
-
-        function _layout() {
-            if (_alignHCenter) {
-                centerTitleText.x = 0
-                centerTitleText.anchors.horizontalCenter = root.horizontalCenter
-            } else {
-                centerTitleText.anchors.horizontalCenter = undefined
-                centerTitleText.x = Qt.binding(function() { return centerTitleText._leftLimit })
-            }
-        }
-    }
-
-    //FIXME use the the right class
-    T.Label {
-        id: leftTitleText
-
-        anchors.left: parent.left
-        anchors.top: logoOrResume.bottom
-        anchors.leftMargin: root._sideMargin
-
-        width: root.textWidth - VLCStyle.margin_normal
-
-        visible: !root.pinControls
-
-        enabled: visible
-
-        topPadding: VLCStyle.margin_large
-        leftPadding: logo.x
-
-        text: root.title
-        horizontalAlignment: Text.AlignLeft
-        color: theme.fg.primary
-        font.weight: Font.DemiBold
-        font.pixelSize: VLCStyle.dp(18, VLCStyle.scale)
-        elide: Text.ElideRight
     }
 
     Loader {
@@ -455,7 +388,7 @@ FocusScope{
 
             Navigation.parentItem: root
             Navigation.leftItem: backBtn
-            Navigation.rightItem: playlistButton
+            Navigation.rightItem: fullscreenButton
 
             onClicked: contextMenu.popup(this.mapToGlobal(0, height))
 
@@ -479,6 +412,17 @@ FocusScope{
             }
         }
 
+        FullscreenButton {
+            id: fullscreenButton
+            anchors.verticalCenter: parent.verticalCenter
+            width: VLCStyle.bannerButton_width
+            height: VLCStyle.bannerButton_height
+            Navigation.parentItem: root
+            Navigation.leftItem: menuSelector.visible ? menuSelector : backBtn
+            Navigation.rightItem: playlistButton
+            onHoveredChanged: root.requestLockUnlockAutoHide(hovered)
+        }
+
         PlaylistPane.PlaylistToggleButton {
             id: playlistButton
 
@@ -486,6 +430,7 @@ FocusScope{
             objectName: ControlListModel.PLAYLIST_BUTTON
             font.pixelSize: VLCStyle.icon_banner
             text: VLCIcons.playlist
+            iconSource: "qrc:///redesign/icons/queue.svg"
             description: qsTr("Play Queue")
 
             AccessibleCompat.id: "topBarPlayqueueButton"
@@ -498,7 +443,7 @@ FocusScope{
             plListView: root.plListView
             
             Navigation.parentItem: root
-            Navigation.leftItem: menuSelector.visible ? menuSelector : backBtn
+            Navigation.leftItem: fullscreenButton
 
             onClicked: togglePlaylistVisibility()
 

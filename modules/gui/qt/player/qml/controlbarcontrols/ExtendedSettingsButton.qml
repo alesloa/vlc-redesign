@@ -18,19 +18,18 @@
 import QtQuick
 
 
-import VLC.Widgets as Widgets
 import VLC.Style
-import VLC.Dialogs
 import VLC.Util
 
-Widgets.IconToolButton {
+LangButton {
     id: extdSettingsBtn
 
     text: VLCIcons.effect_filter
+    iconSource: "qrc:///redesign/icons/playback-settings.svg"
 
     description: qsTr("Extended settings")
 
     AccessibleCompat.id: "extendedSettingsButton"
 
-    onClicked: DialogsProvider.extendedDialog()
+    initialTab: 3
 }

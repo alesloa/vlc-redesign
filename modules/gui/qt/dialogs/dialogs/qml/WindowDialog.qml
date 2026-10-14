@@ -19,6 +19,7 @@
 import QtQuick
 import QtQuick.Window
 import QtQuick.Layouts
+import QtQuick.Controls.Basic
 
 import VLC.MainInterface
 import VLC.Widgets as Widgets
@@ -42,6 +43,7 @@ Window {
     property alias contentComponent: loader.sourceComponent
     property alias standardButtons: buttonBox.standardButtons
     property alias colorContext: layout.colorContext
+    property real contentMargins: VLCStyle.margin_small
 
     signal accepted()
     signal rejected(bool byButton)
@@ -77,7 +79,7 @@ Window {
     ColumnLayout {
         id: layout
         anchors.fill: parent
-        anchors.margins: VLCStyle.margin_small
+        anchors.margins: root.contentMargins
 
 
         readonly property ColorContext colorContext: ColorContext {
@@ -96,6 +98,7 @@ Window {
 
         DialogButtonBox {
             id: buttonBox
+            visible: standardButtons !== DialogButtonBox.NoButton
 
             padding: 0
             spacing: VLCStyle.margin_small

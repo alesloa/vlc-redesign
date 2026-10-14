@@ -21,7 +21,6 @@
  *****************************************************************************/
 
 #import "VLCMainVideoViewAudioMediaDecorativeView.h"
-
 #import "extensions/NSColor+VLCAdditions.h"
 #import "extensions/NSFont+VLCAdditions.h"
 #import "extensions/NSView+VLCAdditions.h"
@@ -39,6 +38,9 @@
 
 @property (readwrite) NSArray<NSDictionary<NSString *, id> *> *lyricsEntries;
 @property (readwrite) NSInteger currentLyricIndex;
+@property NSTextField *mediaTitleLabel;
+@property NSTextField *mediaArtistLabel;
+@property NSView *metadataBackground;
 
 @end
 
@@ -48,6 +50,24 @@
 {
     _lyricsEntries = @[];
     _currentLyricIndex = -1;
+    self.identifier = @"VLCRedesignedPlayerHeader";
+    // Figma Music 4767:23726: large centered artwork with actual title/artist below.
+    _mediaTitleLabel = [NSTextField labelWithString:@""];
+    _mediaArtistLabel = [NSTextField labelWithString:@""];
+    _metadataBackground=[NSView new];_metadataBackground.wantsLayer=YES;
+    _metadataBackground.identifier=@"VLCRedesignedPlayerHeader";
+    [self addSubview:_metadataBackground];
+    self.foregroundCoverArtView.wantsLayer=YES;
+    self.foregroundCoverArtView.layer.cornerRadius=20;
+    self.foregroundCoverArtView.layer.masksToBounds=YES;
+    for (NSTextField *label in @[_mediaTitleLabel, _mediaArtistLabel]) {
+        label.alignment = NSTextAlignmentCenter;
+        label.lineBreakMode = NSLineBreakByTruncatingTail;
+        label.textColor = NSColor.VLCPrimaryForegroundColor;
+        [self addSubview:label];
+    }
+    _mediaTitleLabel.font = [NSFont vlc_redesignFontOfSize:24 weight:NSFontWeightMedium];
+    _mediaArtistLabel.font = [NSFont vlc_redesignFontOfSize:16 weight:NSFontWeightRegular];
 
     self.lyricsTableView.dataSource = self;
     self.lyricsTableView.delegate = self;
@@ -98,6 +118,9 @@
     VLCPlayerController * const controller =
         VLCMain.sharedInstance.playQueueController.playerController;
     VLCInputItem * const currentInputItem = controller.currentMedia;
+    self.mediaTitleLabel.stringValue = currentInputItem.title.length > 0 ? currentInputItem.title : (currentInputItem.name ?: @"");
+    self.mediaArtistLabel.stringValue = currentInputItem.artist ?: @"";
+    self.needsLayout = YES;
     if (!currentInputItem) {
         return;
     }
@@ -120,10 +143,32 @@
     }
 }
 
+- (void)layout
+{
+    [super layout];
+    NSRect cover = self.foregroundCoverArtView.frame;
+    CGFloat width = MAX(0, self.bounds.size.width - 40);
+    self.mediaTitleLabel.frame = NSMakeRect(20, cover.origin.y - 38, width, 30);
+    self.mediaArtistLabel.frame = NSMakeRect(20, cover.origin.y - 66, width, 22);
+    self.metadataBackground.frame=NSMakeRect(0,0,self.bounds.size.width,MAX(0,cover.origin.y-8));
+    [self.metadataBackground vlc_applyRedesignStyle];
+    BOOL hide = self.bounds.size.height < 180 || self.foregroundCoverArtView.hidden;
+    self.mediaTitleLabel.hidden = hide || self.mediaTitleLabel.stringValue.length == 0;
+    self.mediaArtistLabel.hidden = hide || self.mediaArtistLabel.stringValue.length == 0;
+    self.metadataBackground.hidden=hide;
+}
+
 - (void)setCoverArt:(NSImage *)coverArtImage
 {
     _backgroundCoverArtView.image = coverArtImage;
     _foregroundCoverArtView.image = coverArtImage;
+    VLCPlayerController *player=VLCMain.sharedInstance.playQueueController.playerController;
+    BOOL hasArtwork=player.currentMedia.artworkURL!=nil || player.currentMediaLibraryItem.smallArtworkMRL.length>0;
+    // A missing cover retains VLC's original noart foreground, without
+    // stretching that placeholder into a bright backdrop behind the caption.
+    _backgroundCoverArtView.hidden=!hasArtwork;
+    _backgroundVisualEffectView.hidden=!hasArtwork;
+    self.wantsLayer=YES;self.layer.backgroundColor=NSColor.VLCHeaderBackgroundColor.CGColor;
 }
 
 - (void)updateLyricsData

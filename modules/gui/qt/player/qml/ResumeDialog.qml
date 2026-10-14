@@ -84,6 +84,16 @@ FocusScope {
         colorSet: ColorContext.Window
     }
 
+    Rectangle {
+        anchors.fill: parent
+        anchors.margins: -VLCStyle.margin_small
+        z: -1
+        color: theme.bg.primary
+        radius: VLCStyle.dp(5, VLCStyle.scale)
+        border.width: VLCStyle.dp(1, VLCStyle.scale)
+        border.color: theme.border
+    }
+
 
     Component.onCompleted: {
         if (Player.canRestorePlayback) {

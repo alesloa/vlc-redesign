@@ -188,8 +188,11 @@ static int WindowFloatOnTop(vlc_object_t *obj,
 {
     VLC_UNUSED(obj); VLC_UNUSED(psz_var); VLC_UNUSED(oldval);
     @autoreleasepool {
+        // Retain the GUI window before dispatching. The callback's opaque data
+        // can be unregistered while this main-queue notification is pending.
+        VLCVideoWindowCommon * const videoWindow = (__bridge VLCVideoWindowCommon *)p_data;
         dispatch_async(dispatch_get_main_queue(), ^{
-            VLCVideoWindowCommon * const videoWindow = (__bridge VLCVideoWindowCommon *)p_data;
+            if (!videoWindow.hasActiveVideo) return;
             NSNotificationCenter * const notificationCenter = NSNotificationCenter.defaultCenter;
             NSDictionary<NSString *, NSNumber *> * const userInfo = @{
                 VLCWindowFloatOnTopEnabledNotificationKey: @(newval.b_bool)
@@ -205,6 +208,7 @@ static int WindowFloatOnTop(vlc_object_t *obj,
 @interface VLCVideoOutputProvider ()
 {
     NSMutableDictionary *_voutWindows;
+    NSMutableDictionary<NSValue *, NSDictionary *> *_voutCallbackRegistrations;
     VLCKeyboardBacklightControl *_keyboardBacklight;
 
     NSPoint _topLeftPoint;
@@ -227,6 +231,7 @@ static int WindowFloatOnTop(vlc_object_t *obj,
     if (self) {
         atomic_store(&b_intf_starting, true);
         _voutWindows = [[NSMutableDictionary alloc] init];
+        _voutCallbackRegistrations = [[NSMutableDictionary alloc] init];
         _keyboardBacklight = [[VLCKeyboardBacklightControl alloc] init];
         _currentWindowLevel = NSNormalWindowLevel;
         _currentStatusWindowLevel = NSFloatingWindowLevel;
@@ -420,9 +425,20 @@ static int WindowFloatOnTop(vlc_object_t *obj,
     VLCVoutView * const voutView = videoWindow.videoViewController.voutView;
 
     videoWindow.alphaValue = config_GetFloat("macosx-opaqueness");
-    [_voutWindows setObject:videoWindow forKey:[NSValue valueWithPointer:p_wnd]];
+    NSValue * const windowKey = [NSValue valueWithPointer:p_wnd];
+    [self removeFloatOnTopCallbackForDisplay:windowKey];
+    [_voutWindows setObject:videoWindow forKey:windowKey];
     vout_thread_t * const p_vout = (vout_thread_t *)vlc_object_parent(p_wnd);
-    var_AddCallback(p_vout, "video-on-top", WindowFloatOnTop, (__bridge void *)videoWindow);
+    if (var_Type(p_vout, "video-on-top") != 0) {
+        // Keep the exact registration owner alive. A disabled window may remain
+        // in _voutWindows for an audio decoration or playback-end view, and its
+        // vlc_window pointer is no longer safe to dereference on a later Quit.
+        vout_Hold(p_vout);
+        var_AddCallback(p_vout, "video-on-top", WindowFloatOnTop, (__bridge void *)videoWindow);
+        _voutCallbackRegistrations[windowKey] = @{
+            @"vout": [NSValue valueWithPointer:p_vout], @"window": videoWindow
+        };
+    }
     voutView.voutThread = p_vout;
     voutView.voutWindow = p_wnd;
     videoWindow.hasActiveVideo = YES;
@@ -474,6 +490,17 @@ static int WindowFloatOnTop(vlc_object_t *obj,
     return voutView;
 }
 
+- (void)removeFloatOnTopCallbackForDisplay:(NSValue *)key
+{
+    NSDictionary * const registration = _voutCallbackRegistrations[key];
+    if (!registration) return;
+    [_voutCallbackRegistrations removeObjectForKey:key];
+    vout_thread_t * const p_vout = [registration[@"vout"] pointerValue];
+    VLCVideoWindowCommon * const window = registration[@"window"];
+    var_DelCallback(p_vout, "video-on-top", WindowFloatOnTop, (__bridge void *)window);
+    vout_Release(p_vout);
+}
+
 - (void)removeVoutForDisplay:(NSValue *)key
 {
     VLCVideoWindowCommon * const videoWindow = [_voutWindows objectForKey:key];
@@ -482,19 +509,7 @@ static int WindowFloatOnTop(vlc_object_t *obj,
         return;
     }
 
-    vlc_window_t * const p_wnd = (vlc_window_t *)key.pointerValue;
-    if (p_wnd) {
-        vout_thread_t * const p_vout = (vout_thread_t *)vlc_object_parent(p_wnd);
-        if (p_vout) {
-            var_DelCallback(p_vout, "video-on-top", WindowFloatOnTop, (__bridge void *)videoWindow);
-        } else {
-            msg_Warn(getIntf(),
-                     "Could not get p_vout to unregister WindowFloatOnTop callback for window %p",
-                     p_wnd);
-        }
-    } else {
-        msg_Warn(getIntf(), "Could not get p_wnd from key to unregister WindowFloatOnTop callback");
-    }
+    [self removeFloatOnTopCallbackForDisplay:key];
 
     [videoWindow.videoViewController.voutView releaseVoutThread];
 

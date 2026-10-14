@@ -21,6 +21,7 @@ import QtQml.Models
 
 
 import VLC.Style
+import VLC.MainInterface
 import VLC.Util
 import VLC.Widgets as Widgets
 
@@ -130,7 +131,7 @@ ListView {
 
             z: 2
 
-            implicitWidth: VLCStyle.dp(2, VLCStyle.scale)
+            implicitWidth: MainCtx.dp(2, VLCStyle.scale)
             implicitHeight: VLCStyle.icon_medium
 
             visible: dropVisible

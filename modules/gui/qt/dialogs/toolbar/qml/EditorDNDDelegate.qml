@@ -25,6 +25,7 @@ import QtQml.Models
 import VLC.Player
 import VLC.Widgets as Widgets
 import VLC.Style
+import VLC.MainInterface
 
 T.Control {
     id: control
@@ -131,7 +132,7 @@ T.Control {
 
         z: 1
 
-        implicitWidth: VLCStyle.dp(2, VLCStyle.scale)
+        implicitWidth: MainCtx.dp(2, VLCStyle.scale)
         implicitHeight: VLCStyle.icon_medium
 
         visible: dropArea.containsDrag
@@ -139,9 +140,10 @@ T.Control {
     }
 
     background: Rectangle {
-        color: "transparent"
+        color: mouseArea.containsMouse ? theme.bg.secondary : "transparent"
+        radius: MainCtx.dp(4, VLCStyle.scale)
 
-        border.width: VLCStyle.dp(1, VLCStyle.scale)
+        border.width: MainCtx.dp(1, VLCStyle.scale)
         border.color: theme.border
         border.pixelAligned: (radius < Number.EPSILON)
     }
@@ -166,6 +168,8 @@ T.Control {
             onLoaded: {
                 item.paintOnly = true
                 item.enabled = false
+                if (typeof item.audioTracks === "boolean")
+                    item.audioTracks = !!PlayerControlbarControls.control(model.id).audioTracks
             }
         }
     }

@@ -69,7 +69,7 @@ public:
         PLAYBACK_SPEED_BUTTON,
         HIGH_RESOLUTION_TIME_WIDGET,
         FRAME_PREV_BUTTON,
-        RESERVED_0X1F,
+        AUDIO_TRACKS_BUTTON,
 
         SPLITTER = 0x20,
         VOLUME,
@@ -107,10 +107,12 @@ public:
         WIDGET_SPACER = 0x40,
         WIDGET_SPACER_EXTEND,
         WIDGET_MAX,
+        // Reuse a reserved ID; all saved existing control IDs stay unchanged.
+        WIDGET_DIVIDER = RESERVED_0X2B,
     };
     Q_ENUM(ControlType)
 
-    static_assert(RESERVED_0X1F == 0x1F, "missaligned");
+    static_assert(AUDIO_TRACKS_BUTTON == 0x1F, "missaligned");
     static_assert(RESERVED_0X2B == 0x2B, "missaligned");
     static_assert(RESERVED_0X3F == 0x3F, "missaligned");
 

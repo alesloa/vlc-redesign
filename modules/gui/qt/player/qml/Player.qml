@@ -39,6 +39,8 @@ FocusScope {
     property var pagePrefix: []
 
     readonly property int positionSliderY: controlBar.y + controlBar.sliderY
+    readonly property real playerSettingsTop: topBar.y + topBar.height + VLCStyle.margin_small
+    readonly property real playerControlsY: controlBar.y
 
     readonly property string coverSource: {
         if (Player.artwork &&
@@ -51,7 +53,8 @@ FocusScope {
     }
 
     // Only applicable in video mode:
-    property bool displayFadeRectangles: !_controlsUnderVideo && (height > (implicitFadeRectangleHeight * 3))
+    // Compact toolbar surfaces provide contrast without broad gradients over the video.
+    property bool displayFadeRectangles: false
     property real implicitFadeRectangleHeight: VLCStyle.dp(206, VLCStyle.scale)
 
     // Private
@@ -61,6 +64,7 @@ FocusScope {
                                         (MainCtx.intfMainWindow.visibility !== Window.FullScreen))
 
     property bool _keyPressed: false
+    property bool libraryVisible: false
 
     // Settings
 
@@ -183,8 +187,11 @@ FocusScope {
         anchors {
             left: parent.left
             right: parent.right
-            top: (MainCtx.hasEmbededVideo && rootPlayer._controlsUnderVideo) ? topBar.bottom : parent.top
-            bottom: (MainCtx.hasEmbededVideo && rootPlayer._controlsUnderVideo) ? controlBar.top : parent.bottom
+            // Visible solid control surfaces reserve their own space. Video
+            // and its native OSD therefore remain inside the usable viewport;
+            // fullscreen restores the full viewport when controls auto-hide.
+            top: (MainCtx.hasEmbededVideo && (rootPlayer._controlsUnderVideo || topBar.visible)) ? topBar.bottom : parent.top
+            bottom: (MainCtx.hasEmbededVideo && (rootPlayer._controlsUnderVideo || controlBar.visible)) ? controlBar.top : parent.bottom
         }
 
         sourceComponent: MainCtx.hasEmbededVideo ? videoComponent : audioComponent
@@ -320,7 +327,7 @@ FocusScope {
                     anchors.right: parent.right
 
                     opacity: topBar.opacity
-                    visible: rootPlayer.displayFadeRectangles && !topBarAcrylicBg.visible
+                    visible: rootPlayer.displayFadeRectangles && !topBarBackground.visible
 
                     gradient: Gradient {
                         GradientStop { position: 0; color: Qt.rgba(0, 0, 0, .8) }
@@ -945,18 +952,14 @@ FocusScope {
                  ? rootPlayer.width - playlistpopup.width
                  : rootPlayer.width
 
-        // NOTE: With pinned controls, the top controls are hidden when switching to
-        //       fullScreen. Except when resume is visible
-        visible: (MainCtx.pinVideoControls === false
-                  ||
-                  MainCtx.intfMainWindow.visibility !== Window.FullScreen
-                  ||
-                  resumeVisible)
+        // Keep the real title and top actions available in fullscreen;
+        // the existing toolbar visibility state still controls auto-hide.
+        visible: true
 
         focus: true
-        title: Player.title
+        title: Player.title || Player.name
 
-        pinControls: MainCtx.pinVideoControls
+        pinControls: rootPlayer._controlsUnderVideo
 
         showCSD: MainCtx.clientSideDecoration && (MainCtx.intfMainWindow.visibility !== Window.FullScreen)
         showToolbar: MainCtx.hasToolbarMenu && (MainCtx.intfMainWindow.visibility !== Window.FullScreen)
@@ -970,6 +973,8 @@ FocusScope {
             else
                 return null
         }
+        libraryVisible: rootPlayer.libraryVisible
+        onToggleLibraryVisibility: rootPlayer.libraryVisible = !rootPlayer.libraryVisible
 
         Navigation.parentItem: rootPlayer
         Navigation.downItem: {
@@ -1006,27 +1011,40 @@ FocusScope {
         }
 
         // TODO: Make TopBar a Control and use background
-        Widgets.AcrylicBackground {
-            id: topBarAcrylicBg
+        Rectangle {
+            id: topBarBackground
 
             z: -1
 
             anchors.fill: parent
 
-            opacity: {
-                if (MainCtx.hasEmbededVideo && !MainCtx.pinVideoControls && !rootPlayer.displayFadeRectangles) {
-                    return 0.6
-                } else if (MainCtx.intfMainWindow.visibility === Window.FullScreen && MainCtx.hasEmbededVideo) {
-                    return MainCtx.pinOpacity
-                } else {
-                    return 1.0
-                }
-            }
-
-            tintColor: windowTheme.bg.primary
-
-            visible: MainCtx.pinVideoControls || (MainCtx.hasEmbededVideo && !rootPlayer.displayFadeRectangles)
+            // Figma's title/actions sit on a solid top surface. The existing
+            // topBar fade state still hides the whole header with the controls.
+            color: windowTheme.bg.primary
         }
+    }
+
+    Loader {
+        id: compactLibrary
+        anchors.left: parent.left
+        anchors.top: topBar.bottom
+        anchors.bottom: controlBar.top
+        width: Math.min(VLCStyle.dp(427, VLCStyle.scale), rootPlayer.width * 0.55)
+        z: 2
+        active: rootPlayer.libraryVisible && MainCtx.mediaLibraryAvailable
+        visible: active
+        source: "qrc:///qt/qml/VLC/Player/PlayerLibrary.qml"
+        onLoaded: {
+            item.requestClose.connect(() => { rootPlayer.libraryVisible = false })
+            item.requestFullView.connect((path, properties) => {
+                History.push(path, properties)
+                MainCtx.playerView = false
+            })
+        }
+        onVisibleChanged: rootPlayer.lockUnlockAutoHide(visible)
+        Navigation.parentItem: rootPlayer
+        Navigation.upItem: topBar
+        Navigation.downItem: controlBar
     }
 
     Loader {
@@ -1034,13 +1052,13 @@ FocusScope {
 
         anchors {
             // NOTE: When the controls are pinned we display the playqueue under the topBar.
-            top: (rootPlayer._controlsUnderVideo) ? topBar.bottom
-                                                  : parent.top
+            top: topBar.bottom
 
             right: parent.right
-            bottom: parent.bottom
-
-            bottomMargin: parent.height - rootPlayer.positionSliderY
+            bottom: controlBar.top
+            topMargin: VLCStyle.dp(20, VLCStyle.scale)
+            bottomMargin: VLCStyle.dp(20, VLCStyle.scale)
+            rightMargin: VLCStyle.dp(20, VLCStyle.scale)
         }
 
         focus: false
@@ -1109,17 +1127,12 @@ FocusScope {
             wheelEnabled: true
 
             rightPadding: VLCStyle.applicationHorizontalMargin
-            topPadding:  {
-                if (rootPlayer._controlsUnderVideo)
-                    return VLCStyle.margin_normal
-                else
-                    // NOTE: We increase the padding accordingly to avoid overlapping the TopBar.
-                    return topBar.reservedHeight
-            }
+            topPadding: 0
             bottomPadding: 0
 
             background: Rectangle {
-                color: windowTheme.bg.primary.alpha(0.8)
+                color: windowTheme.bg.secondary.alpha(0.95)
+                radius: VLCStyle.dp(10, VLCStyle.scale)
             }
 
             view.fadingEdge.pixelAlignedForDPR: !controlBar.visible
@@ -1268,6 +1281,25 @@ FocusScope {
         }
     }
 
+    // Source: the existing restore-playback callback and ResumeDialog copy.
+    ResumeDialog {
+        id: resumeDialog
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: controlBar.top
+        anchors.bottomMargin: VLCStyle.margin_large
+        width: maxWidth
+        maxWidth: Math.min(VLCStyle.dp(620, VLCStyle.scale), rootPlayer.width - VLCStyle.margin_xxlarge * 2)
+        z: 3
+
+        Navigation.parentItem: rootPlayer
+        onVisibleChanged: rootPlayer.lockUnlockAutoHide(visible)
+        onHidden: {
+            if (activeFocus)
+                controlBar.forceActiveFocus(Qt.OtherFocusReason)
+        }
+    }
+
     Widgets.FloatingNotification {
         id: notif
 
@@ -1294,11 +1326,10 @@ FocusScope {
 
         rightPadding: VLCStyle.applicationHorizontalMargin
         leftPadding: VLCStyle.applicationHorizontalMargin
-        bottomPadding: VLCStyle.applicationVerticalMargin + VLCStyle.margin_xsmall
+        bottomPadding: inlineSeekBar ? VLCStyle.dp(11, VLCStyle.scale)
+                                    : VLCStyle.applicationVerticalMargin + VLCStyle.margin_xsmall
 
-        textPosition: (MainCtx.pinVideoControls)
-                      ? ControlBar.TimeTextPosition.LeftRightSlider
-                      : ControlBar.TimeTextPosition.AboveSlider
+        textPosition: ControlBar.TimeTextPosition.LeftRightSlider
 
         // hide right text so that it won't overlap with play queue
         showRemainingTime: (textPosition !== ControlBar.TimeTextPosition.AboveSlider)

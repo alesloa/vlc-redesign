@@ -75,6 +75,8 @@ T.Pane {
                     return VLCIcons.volume_high
             }
             description: qsTr("Mute")
+            iconSource: !_player.muted && _player.volume > .66
+                        ? "qrc:///redesign/icons/volume-high.svg" : ""
 
             AccessibleCompat.id: "muteButton"
 
@@ -97,8 +99,8 @@ T.Pane {
         Widgets.SliderExt {
             id: volControl
 
-            // FIXME: use VLCStyle
-            implicitWidth: VLCStyle.dp(100, VLCStyle.scale)
+            implicitWidth: VLCStyle.dp(88, VLCStyle.scale)
+            handleWidth: VLCStyle.dp(2, VLCStyle.scale)
 
             // WARNING: Directly setting the insets break handle and background positioning.
             Binding on topInset {
@@ -126,6 +128,51 @@ T.Pane {
             property bool filterEvents: false
 
             color: root.sliderColor
+
+            // Original Figma volume SVG layers retain their exported geometry.
+            // The foreground is clipped by real volume position, replacing the prototype's 50% demo mask.
+            background: Item {
+                x: volControl.leftPadding
+                y: volControl.topPadding + (volControl.availableHeight - height) / 2
+                width: volControl.availableWidth
+                height: implicitHeight
+                implicitHeight: VLCStyle.dp(28, VLCStyle.scale)
+
+                Image {
+                    anchors.centerIn: parent
+                    width: VLCStyle.dp(89, VLCStyle.scale)
+                    height: VLCStyle.dp(27.3633, VLCStyle.scale)
+                    source: "qrc:///redesign/icons/volume-background.svg"
+                    sourceSize: Qt.size(width, height)
+                    fillMode: Image.PreserveAspectFit
+                }
+                Item {
+                    x: VLCStyle.dp(1, VLCStyle.scale)
+                    y: (parent.height - height) / 2
+                    width: volControl.position * VLCStyle.dp(86, VLCStyle.scale)
+                    height: VLCStyle.dp(24.56, VLCStyle.scale)
+                    clip: true
+                    Image {
+                        width: VLCStyle.dp(86, VLCStyle.scale)
+                        height: VLCStyle.dp(24.56, VLCStyle.scale)
+                        source: "qrc:///redesign/icons/volume-fill.svg"
+                        sourceSize: Qt.size(width, height)
+                        fillMode: Image.PreserveAspectFit
+                    }
+                }
+            }
+
+            handle: Rectangle {
+                x: volControl.leftPadding + volControl.visualPosition * (volControl.availableWidth - width)
+                y: volControl.topPadding + (volControl.availableHeight - height) / 2
+                implicitWidth: volControl.handleWidth
+                implicitHeight: VLCStyle.dp(26, VLCStyle.scale)
+                width: implicitWidth
+                height: implicitHeight
+                radius: VLCStyle.dp(1, VLCStyle.scale)
+                color: volControl.colorContext.fg.primary
+                visible: (volControl.visualFocus || volControl.pressed) && volControl.enabled
+            }
 
             from: 0
             to: root._maxvolpos

@@ -152,19 +152,7 @@ T.Control {
 
         hoverEnabled: true
 
-        readonly property bool cursorInside: {
-            if (!containsMouse)
-                return false
-
-            const center = (width / 2)
-            if (Helpers.pointInRadius( center - mouseX,
-                                       center - mouseY,
-                                       center )) {
-                return true
-            } else {
-                return false
-            }
-        }
+        readonly property bool cursorInside: containsMouse
 
         onCursorInsideChanged: {
             if (pressed && !cursorInside) {
@@ -205,49 +193,41 @@ T.Control {
         }
     }
 
-    contentItem: T.Label {
-        text: {
-            const state = Player.playingState
-
-            if (!paintOnly
-                    && state !== Player.PLAYING_STATE_PAUSED
-                    && state !== Player.PLAYING_STATE_STOPPED)
-                return VLCIcons.pause_filled
-            else
-                return VLCIcons.play_filled
-        }
-
-        color: cursorInside ? theme.accent
-                            : "black"  //foreground is always black
-
-        font.pixelSize: Math.round(parent.height / 1.7)
-
-        font.family: VLCIcons.fontFamily
-
-        verticalAlignment: Text.AlignVCenter
-        horizontalAlignment: Text.AlignHCenter
-
+    contentItem: Item {
         Accessible.ignored: true
 
-        DelayedBehavior on color {
-            delayedEnabled: theme.initialized
+        readonly property ColorContext colorContext: ColorContext {
+            id: playTheme
+            colorSet: ColorContext.ButtonAccent
+            enabled: root.enabled || root.paintOnly
+            hovered: root.cursorInside
+            pressed: mouseArea.containsPress
+        }
 
-            ColorAnimation {
-                duration: VLCStyle.duration_veryShort
-                easing.type: Easing.InOutSine
+        Image {
+            anchors.centerIn: parent
+            width: VLCStyle.dp(24, VLCStyle.scale)
+            height: VLCStyle.dp(24, VLCStyle.scale)
+            sourceSize: Qt.size(width, height)
+            source: {
+                const state = Player.playingState
+                const paused = !root.paintOnly && state !== Player.PLAYING_STATE_PAUSED
+                                                && state !== Player.PLAYING_STATE_STOPPED
+                const icon = paused ? "qrc:///redesign/icons/pause.svg" : "qrc:///redesign/icons/play.svg"
+                return SVGColorImage.colorize(icon).any({"#161616": playTheme.fg.primary}).uri()
             }
         }
     }
 
     background: Item {
-        implicitWidth: height
-        implicitHeight: VLCStyle.icon_medium
+        implicitWidth: VLCStyle.dp(54, VLCStyle.scale)
+        implicitHeight: VLCStyle.dp(28, VLCStyle.scale)
 
         Widgets.AnimatedBackground {
             anchors.fill: parent
-            anchors.margins: -border.width * 4
+            anchors.margins: -border.width * 2
 
-            radius: width / 2
+            radius: VLCStyle.dp(6, VLCStyle.scale)
             border.pixelAligned: false
 
             enabled: theme.initialized
@@ -258,12 +238,8 @@ T.Control {
         Rectangle {
             anchors.fill: parent
 
-            radius: width / 2
-
-            gradient: Gradient {
-                GradientStop { position: 0.0; color: "#e25b01" }
-                GradientStop { position: 1.0; color: "#f89a06" }
-            }
+            radius: VLCStyle.dp(6, VLCStyle.scale)
+            color: theme.accent
 
             Widgets.RoundedRectangleShadow {
                 id: hoverShadow
@@ -271,8 +247,8 @@ T.Control {
                 visible: opacity > 0
                 opacity: 0
 
-                blurRadius: VLCStyle.dp(9, VLCStyle.scale)
-                yOffset: VLCStyle.dp(4, VLCStyle.scale)
+                blurRadius: VLCStyle.dp(4, VLCStyle.scale)
+                yOffset: 0
 
                 color: theme.accent.alpha(0.29)
             }
@@ -280,13 +256,13 @@ T.Control {
             Rectangle {
                 id: innerRectangle
 
-                color: "white"
+                color: theme.accent
 
                 anchors.fill: parent
                 anchors.margins: _diminished ? (parent.width / 2)
-                                             : VLCStyle.dp(2, VLCStyle.scale)
+                                             : VLCStyle.dp(1, VLCStyle.scale)
 
-                radius: width / 2
+                radius: VLCStyle.dp(5, VLCStyle.scale)
 
                 property bool _diminished: false
 

@@ -42,14 +42,18 @@ T.Pane {
     implicitHeight: Math.max(implicitBackgroundHeight + bottomInset,
                              implicitContentHeight + topPadding + bottomPadding)
 
-    topInset: sliderY
+    topInset: 0
 
-    bottomPadding: VLCStyle.margin_xsmall
+    bottomPadding: inlineSeekBar ? VLCStyle.dp(11, VLCStyle.scale) : VLCStyle.margin_xsmall
+    topPadding: inlineSeekBar ? VLCStyle.dp(11, VLCStyle.scale) : 0
 
     readonly property real sliderY: mapFromItem(contentItem, 0, contentItem.sliderY).y
-    property int textPosition: ControlBar.TimeTextPosition.AboveSlider
+    property int textPosition: ControlBar.TimeTextPosition.LeftRightSlider
     property int identifier: -1
-    property real sliderHeight: VLCStyle.heightBar_xxsmall
+    property real sliderHeight: VLCStyle.dp(28, VLCStyle.scale)
+    readonly property bool inlineSeekBar: textPosition === ControlBar.TimeTextPosition.LeftRightSlider
+                                         && (playerControlLayout.model?.center.count === 0)
+                                         && width >= VLCStyle.dp(960, VLCStyle.scale)
     property real bookmarksHeight: VLCStyle.controlBarBookmarksHeight
     property bool showRemainingTime: true
 
@@ -119,7 +123,7 @@ T.Pane {
     contentItem: ColumnLayout {
         spacing: VLCStyle.margin_xsmall
 
-        readonly property real sliderY: row2.y
+        readonly property real sliderY: mapFromItem(row2, 0, 0).y
 
         property alias trackPositionSlider: trackPositionSlider
 
@@ -227,7 +231,8 @@ T.Pane {
                 enabled: Player.playingState === Player.PLAYING_STATE_PLAYING || Player.playingState === Player.PLAYING_STATE_PAUSED
 
                 Navigation.parentItem: root
-                Navigation.downItem: playerControlLayout
+                Navigation.upItem: playerControlLayout
+                Navigation.downItem: root.Navigation.downItem
 
                 activeFocusOnTab: true
 
@@ -244,8 +249,8 @@ T.Pane {
                 active: MainCtx.mediaLibraryAvailable
                 source: "qrc:///qt/qml/VLC/MediaLibrary/Bookmarks.qml"
 
-                x: root.leftPadding + trackPositionSlider.x + row2.Layout.leftMargin
-                y: row2.y + row2.height + VLCStyle.margin_xxsmall
+                x: root.mapFromItem(trackPositionSlider, 0, 0).x
+                y: root.mapFromItem(trackPositionSlider, 0, trackPositionSlider.height).y + VLCStyle.margin_xxsmall
                 width: trackPositionSlider.width
 
                 onLoaded: {
@@ -255,6 +260,33 @@ T.Pane {
                 }
             }
         ]
+
+        PlayerControlLayout {
+            id: playerControlLayout
+
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.leftMargin: VLCStyle.margin_small
+            Layout.rightMargin: VLCStyle.margin_small
+
+            identifier: root.identifier
+            inlineSeekBar: root.inlineSeekBar
+
+            Layout.preferredHeight: VLCStyle.dp(root.inlineSeekBar ? 32 : 44, VLCStyle.scale)
+
+            visible: !model?.empty ?? false
+
+            Navigation.upItem: root.Navigation.upItem
+            Navigation.downItem: trackPositionSlider.enabled ? trackPositionSlider : root.Navigation.downItem
+
+            onRequestLockUnlockAutoHide: (lock) => root.requestLockUnlockAutoHide(lock)
+
+            onMenuOpened: (menu) => root.applyMenu(menu)
+
+            Component.onCompleted: {
+                root.forceUnlock.connect(playerControlLayout.forceUnlock)
+            }
+        }
 
         Item {
             // BUG: RowLayout can not be used here
@@ -286,6 +318,9 @@ T.Pane {
 
         RowLayout {
             id: row2
+            parent: root.inlineSeekBar && playerControlLayout.seekContainer
+                    ? playerControlLayout.seekContainer : root.contentItem
+            anchors.fill: parent === playerControlLayout.seekContainer ? parent : undefined
 
             children: {
                 switch (textPosition) {
@@ -305,36 +340,12 @@ T.Pane {
 
             Layout.fillWidth: true
             Layout.fillHeight: false
+            Layout.bottomMargin: !root.inlineSeekBar && bookmarksLoader.active ? root.bookmarksHeight + VLCStyle.margin_xxsmall : 0
             Layout.leftMargin: (textPosition === ControlBar.TimeTextPosition.LeftRightSlider) ? VLCStyle.margin_xsmall
                                                                                               : 0
 
             Layout.rightMargin: Layout.leftMargin
         }
 
-        PlayerControlLayout {
-            id: playerControlLayout
-
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.leftMargin: VLCStyle.margin_large
-            Layout.rightMargin: VLCStyle.margin_large
-
-            identifier: root.identifier
-
-            implicitHeight: MainCtx.pinVideoControls ? VLCStyle.controlLayoutHeightPinned
-                                                     : VLCStyle.controlLayoutHeight
-
-            visible: !model?.empty ?? false
-
-            Navigation.upItem: trackPositionSlider.enabled ? trackPositionSlider : root.Navigation.upItem
-
-            onRequestLockUnlockAutoHide: (lock) => root.requestLockUnlockAutoHide(lock)
-
-            onMenuOpened: (menu) => root.applyMenu(menu)
-
-            Component.onCompleted: {
-                root.forceUnlock.connect(playerControlLayout.forceUnlock)
-            }
-        }
     }
 }

@@ -38,14 +38,20 @@
 #include <QComboBox>
 #include <QTimer>
 #include <QFileDialog>
+#include <QColorDialog>
+#include <QPointer>
 #include <QGraphicsScene>
 #include <QPainter>
 #include <QRegularExpression>
 #include <QApplication>
 #include <QScreen>
+#include <QScrollArea>
+#include <QToolButton>
+#include <QStyleOptionToolButton>
 
 #include "extended_panels.hpp"
 #include "dialogs/preferences/preferences.hpp"
+#include "dialogs/preferences/preferences_widgets.hpp"
 #include "qt.hpp"
 #include "maininterface/mainctx.hpp"
 #include "player/player_controller.hpp"
@@ -104,11 +110,19 @@ static const QString ModuleFromWidgetName( QObject *obj )
 
 static QString OptionFromWidgetName( QObject *obj )
 {
+    const QString explicitName=obj->property("effectOptionName").toString();
+    if(!explicitName.isEmpty()) return explicitName;
     /* Gruik ? ... nah */
     return obj->objectName()
         .remove( QRegularExpression( QStringLiteral( "Slider|Combo|Dial|Check|Spin|Text" ) ) )
         .replace( QRegularExpression( QStringLiteral( "([A-Z])" ) ), QStringLiteral( "-\\1" ) )
         .toLower();
+}
+
+static QString ModuleForOption(QObject *option)
+{
+    const QString explicitModule=option->property("effectFilterModule").toString();
+    return explicitModule.isEmpty()?ModuleFromWidgetName(option->parent()):explicitModule;
 }
 
 static inline void setup_vfilter( qt_intf_t *p_intf, const char* psz_name, QWidget *widget )
@@ -144,6 +158,7 @@ static inline void setup_vfilter( qt_intf_t *p_intf, const char* psz_name, QWidg
 #define SETUP_VFILTER_gb( widget ) SETUP_VFILTER( widget, QGroupBox )
 
 #define SETUP_VFILTER_OPTION( widget, signal ) \
+    ui.widget->setProperty("effectFilterModule",ModuleFromWidgetName(ui.widget->parent())); \
     initComboBoxItems( ui.widget ); \
     setWidgetValue( ui.widget ); \
     connect( ui.widget, signal, this, &ExtVideo::updateFilterOptions );
@@ -277,6 +292,258 @@ ExtVideo::ExtVideo( qt_intf_t *_p_intf, QTabWidget *_parent ) :
     connect( ui.topBotCropSync, &QCheckBox::toggled, this, &ExtVideo::cropChange );
     connect( ui.topBotCropSync, &QCheckBox::toggled, ui.cropBotPx, &QSpinBox::setDisabled );
     connect( ui.leftRightCropSync, &QCheckBox::toggled, ui.cropRightPx, &QSpinBox::setDisabled );
+    redesignControls(_parent);
+}
+
+namespace {
+class EffectsDisclosureButton : public QToolButton
+{
+public:
+    using QToolButton::QToolButton;
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QStyleOptionToolButton option;
+        initStyleOption(&option);
+        option.text.clear();option.icon=QIcon();option.arrowType=Qt::NoArrow;
+        QPainter painter(this);
+        style()->drawComplexControl(QStyle::CC_ToolButton,&option,&painter,this);
+        painter.setPen(palette().color(underMouse()?QPalette::Highlight:QPalette::WindowText));
+        painter.drawText(rect().adjusted(16,0,-40,0),Qt::AlignLeft|Qt::AlignVCenter,text());
+        // Original source chevron geometry; expanded disclosure points up.
+        auto chevron=QIcon(QStringLiteral(":/redesign/icons/settings-chevron.svg")).pixmap(24,24);
+        if(isChecked())chevron=chevron.transformed(QTransform().rotate(180));
+        painter.drawPixmap(width()-34,(height()-24)/2,chevron);
+    }
+};
+
+void removeWidgetFromLayout(QLayout *layout,QWidget *widget)
+{
+    if(!layout) return;
+    for(int i=layout->count();i-->0;)
+    {
+        auto item=layout->itemAt(i);
+        if(item->widget()==widget) delete layout->takeAt(i);
+        else if(item->layout()) removeWidgetFromLayout(item->layout(),widget);
+    }
+}
+
+void moveEffectWidget(QWidget *widget,QWidget *parent)
+{
+    if(auto original=widget->parentWidget()) removeWidgetFromLayout(original->layout(),widget);
+    widget->setParent(parent);
+    QFont font=QApplication::font();font.setPixelSize(14);widget->setFont(font);
+    widget->show();
+}
+
+QVBoxLayout *effectPage(QWidget *page)
+{
+    if(auto previous=page->layout()) delete previous;
+    auto layout=new QVBoxLayout(page);
+    layout->setContentsMargins(0,0,0,0);layout->setSpacing(0);
+    auto scroll=new QScrollArea(page);scroll->setFrameShape(QFrame::NoFrame);scroll->setWidgetResizable(true);
+    scroll->setAlignment(Qt::AlignTop|Qt::AlignLeft);
+    auto card=new QWidget(scroll);card->setProperty("effectSettingsCard",true);
+    card->setFixedWidth(360);card->setSizePolicy(QSizePolicy::Fixed,QSizePolicy::Maximum);
+    auto cardLayout=new QVBoxLayout(card);cardLayout->setContentsMargins(0,0,0,0);cardLayout->setSpacing(0);
+    auto disclosure=new EffectsDisclosureButton(card);
+    disclosure->setObjectName(QStringLiteral("effectSettingsDisclosure"));
+    disclosure->setText(qtr("Collapse Settings"));
+    disclosure->setAccessibleName(disclosure->text());
+    disclosure->setCheckable(true);disclosure->setChecked(true);disclosure->setFixedHeight(48);
+    disclosure->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Fixed);
+    cardLayout->addWidget(disclosure);
+    auto body=new QWidget(card);body->setObjectName(QStringLiteral("effectSettingsBody"));
+    cardLayout->addWidget(body);scroll->setWidget(card);layout->addWidget(scroll,1);
+    QObject::connect(disclosure,&QToolButton::toggled,body,&QWidget::setVisible);
+    QObject::connect(disclosure,&QToolButton::toggled,disclosure,[disclosure](bool expanded){
+        disclosure->setText(expanded?qtr("Collapse Settings"):qtr("Expand Settings"));
+        disclosure->setAccessibleName(disclosure->text());
+    });
+    auto rows=new QVBoxLayout(body);rows->setContentsMargins(16,12,16,20);rows->setSpacing(20);
+    return rows;
+}
+
+void effectInformation(QHBoxLayout *layout,QWidget *parent,const QString &name)
+{
+    const auto option=config_FindConfig(qtu(name));
+    if(!option || !option->psz_text) return;
+    auto help=new QToolButton(parent);help->setObjectName(QStringLiteral("preferenceInfo"));
+    help->setIcon(QIcon(QStringLiteral(":/redesign/icons/settings-info.svg")));help->setIconSize(QSize(18,18));
+    help->setFixedSize(20,20);help->setStyleSheet(QStringLiteral("padding:0; border:0; background:transparent;"));
+    help->setAutoRaise(true);help->setAccessibleName(qtr("Help"));
+    help->setToolTip(formatTooltip(qfut(option->psz_longtext&&*option->psz_longtext?option->psz_longtext:option->psz_text)));
+    QObject::connect(help,&QToolButton::clicked,help,[help](){showPreferenceHelp(help,help->toolTip());});
+    layout->addWidget(help);
+}
+
+PreferenceToggle *effectGroupToggle(QGroupBox *original,QWidget *parent)
+{
+    auto toggle=new PreferenceToggle(original->title(),parent);
+    toggle->setObjectName(original->objectName()+QStringLiteral("Presentation"));
+    toggle->setChecked(original->isChecked());
+    toggle->setAccessibleName(original->title());
+    toggle->setEnabled(original->isEnabled()&&module_exists(qtu(ModuleFromWidgetName(original))));
+    QObject::connect(toggle,&QCheckBox::clicked,original,[original](bool checked){
+        original->setChecked(checked);
+        // Preserve the original clicked signal's sender, which maps the
+        // existing filter action by its original object name.
+        original->clicked(checked);
+    });
+    QObject::connect(original,&QGroupBox::toggled,toggle,&QCheckBox::setChecked);
+    original->hide();return toggle;
+}
+
+PreferenceToggle *effectCheckbox(QCheckBox *original,QWidget *parent,bool filterAction=false)
+{
+    auto toggle=new PreferenceToggle(original->text(),parent);
+    toggle->setObjectName(original->objectName()+QStringLiteral("Presentation"));
+    toggle->setChecked(original->isChecked());toggle->setEnabled(original->isEnabled());
+    if(filterAction) toggle->setEnabled(module_exists(qtu(ModuleFromWidgetName(original))));
+    QObject::connect(toggle,&QCheckBox::clicked,original,[original,filterAction](bool checked){
+        original->setChecked(checked);
+        if(filterAction) original->clicked(checked);
+    });
+    QObject::connect(original,&QCheckBox::toggled,toggle,&QCheckBox::setChecked);
+    original->hide();return toggle;
+}
+
+void bindVideoField(QGroupBox *group,QWidget *field)
+{
+    const bool available=module_exists(qtu(ModuleFromWidgetName(group)));
+    const auto enabled=[field,available](bool checked){field->setEnabled(available&&checked);};
+    QObject::connect(group,&QGroupBox::toggled,field,enabled);enabled(group->isChecked());
+}
+
+QWidget *videoSliderRow(QSlider *slider,const QString &caption,QGroupBox *group,QWidget *parent,QLabel *value=nullptr)
+{
+    auto row=new QWidget(parent);auto layout=new QVBoxLayout(row);layout->setContentsMargins(0,0,0,0);layout->setSpacing(10);
+    auto heading=new QHBoxLayout;heading->setSpacing(10);
+    auto label=new QLabel(caption,row);QFont font=QApplication::font();font.setPixelSize(14);label->setFont(font);
+    heading->addWidget(label);
+    effectInformation(heading,row,OptionFromWidgetName(slider));heading->addStretch();
+    if(value){moveEffectWidget(value,row);heading->addWidget(value);}
+    layout->addLayout(heading);moveEffectWidget(slider,row);
+    slider->setOrientation(Qt::Horizontal);slider->setMinimumHeight(24);slider->setProperty("filterOption",true);
+    // tickInterval is also the original float conversion scale; retain it.
+    slider->setTickPosition(QSlider::NoTicks);layout->addWidget(slider);
+    bindVideoField(group,slider);bindVideoField(group,label);if(value)bindVideoField(group,value);
+    return row;
+}
+
+QWidget *videoColorField(QLineEdit *field,QGroupBox *group,QWidget *parent)
+{
+    auto frame=new QWidget(parent);frame->setProperty("effectValueField",true);
+    auto layout=new QHBoxLayout(frame);layout->setContentsMargins(12,0,5,0);layout->setSpacing(10);
+    auto text=new QWidget(frame);auto textLayout=new QHBoxLayout(text);
+    textLayout->setContentsMargins(0,0,0,0);textLayout->setSpacing(0);
+    auto prefix=new QLabel(QStringLiteral("#"),text); // Supplied Colors component614:1430.
+    textLayout->addWidget(prefix);moveEffectWidget(field,text);field->setMaximumWidth(140);
+    field->setMinimumHeight(32);field->setStyleSheet(QStringLiteral("border:0; padding:0;"));textLayout->addWidget(field,1);
+    layout->addWidget(text,1);
+    auto swatch=new QToolButton(frame);swatch->setObjectName(field->objectName()+QStringLiteral("ColorPicker"));
+    swatch->setFixedSize(22,22);swatch->setAccessibleName(qtr("Color"));layout->addWidget(swatch);
+    const auto refresh=[field,swatch](){bool valid=false;const uint rgb=field->text().toUInt(&valid,16);if(valid)swatch->setStyleSheet(QStringLiteral("background-color:%1; border:0; border-radius:2px;").arg(QColor::fromRgb(rgb).name()));};
+    QObject::connect(field,&QLineEdit::textChanged,swatch,refresh);refresh();
+    QObject::connect(swatch,&QToolButton::clicked,swatch,[guard=QPointer<QLineEdit>(field)](){
+        if(!guard)return;const QColor initial=QColor::fromRgb(guard->text().toUInt(nullptr,16));
+        const QColor selected=QColorDialog::getColor(initial,guard->window(),qtr("Color"));
+        if(guard&&selected.isValid())guard->setText(QStringLiteral("%1").arg(selected.rgb()&0xFFFFFF,6,16,QLatin1Char('0')).toUpper());
+    });
+    frame->setFixedSize(116,32);bindVideoField(group,frame);return frame;
+}
+} // namespace
+
+void ExtVideo::redesignControls(QTabWidget *tabs)
+{
+    // These panels use the actual supplied Essential536:1855, Crop543:990,
+    // Colors614:1430 components. Original widgets, values and action adapters
+    // remain the sole source of state. Other existing panels remain available.
+    const auto essential=effectPage(ui.tab);
+    for(auto group:{ui.adjustEnable,ui.sharpenEnable,ui.gradfunEnable,ui.grainEnable})
+    {
+        auto toggle=effectGroupToggle(group,essential->parentWidget());
+        essential->addWidget(toggle);
+        if(group==ui.adjustEnable)
+        {
+            essential->addWidget(videoSliderRow(ui.hueSlider,ui.label->text(),group,essential->parentWidget(),ui.hueValueLabel));
+            essential->addWidget(videoSliderRow(ui.brightnessSlider,ui.label_3->text(),group,essential->parentWidget(),ui.brightnessValueLabel));
+            // VLC4 marks this legacy UI option obsolete; do not present an
+            // unavailable control. Older providers with real metadata retain it.
+            const auto thresholdOption=config_FindConfig("brightness-threshold");
+            if(thresholdOption&&thresholdOption->psz_text)
+            {
+                auto threshold=effectCheckbox(ui.brightnessThresholdCheck,essential->parentWidget());
+                bindVideoField(group,threshold);essential->addWidget(threshold);
+            }
+            essential->addWidget(videoSliderRow(ui.contrastSlider,ui.label_2->text(),group,essential->parentWidget(),ui.contrastValueLabel));
+            essential->addWidget(videoSliderRow(ui.saturationSlider,ui.label_4->text(),group,essential->parentWidget(),ui.saturationValueLabel));
+            essential->addWidget(videoSliderRow(ui.gammaSlider,ui.label_5->text(),group,essential->parentWidget(),ui.gammaValueLabel));
+        }
+        else if(group==ui.sharpenEnable) essential->addWidget(videoSliderRow(ui.sharpenSigmaSlider,qtr("Sharpen Sigma"),group,essential->parentWidget()));
+        else if(group==ui.gradfunEnable) essential->addWidget(videoSliderRow(ui.gradfunRadiusSlider,qtr("Banding Removal Radius"),group,essential->parentWidget()));
+        else essential->addWidget(videoSliderRow(ui.grainVarianceSlider,qtr("Film Grain Variance"),group,essential->parentWidget()));
+    }
+    const auto crop=effectPage(ui.tab_3);
+    crop->setContentsMargins(16,6,16,16);crop->setSpacing(16);
+    const auto pair=[&](QSpinBox *first,const QString &firstName,QSpinBox *second,const QString &secondName,QCheckBox *sync){
+        auto row=new QWidget(crop->parentWidget());auto fields=new QHBoxLayout(row);fields->setContentsMargins(0,0,0,0);fields->setSpacing(8);
+        for(const auto &entry:{qMakePair(first,firstName),qMakePair(second,secondName)})
+        {
+            auto frame=new QWidget(row);frame->setProperty("effectValueField",true);auto content=new QHBoxLayout(frame);
+            content->setContentsMargins(12,0,6,0);content->setSpacing(4);
+            auto caption=new QLabel(entry.second,frame);caption->setBuddy(entry.first);content->addWidget(caption);
+            moveEffectWidget(entry.first,frame);entry.first->setFixedHeight(32);entry.first->setMinimumWidth(56);
+            entry.first->setStyleSheet(QStringLiteral("border:0; padding:0;"));content->addWidget(entry.first,1);fields->addWidget(frame,1);
+        }
+        auto link=new QToolButton(row);link->setIcon(QIcon(QStringLiteral(":/redesign/icons/settings-crop-link.svg")));
+        link->setIconSize(QSize(24,24));link->setFixedSize(30,32);link->setCheckable(true);link->setChecked(sync->isChecked());
+        link->setObjectName(sync->objectName()+QStringLiteral("Presentation"));link->setAccessibleName(sync->text());link->setToolTip(sync->text());
+        QObject::connect(link,&QToolButton::toggled,sync,&QCheckBox::setChecked);QObject::connect(sync,&QCheckBox::toggled,link,&QToolButton::setChecked);
+        sync->hide();fields->addWidget(link);crop->addWidget(row);
+    };
+    pair(ui.cropTopPx,ui.label_10->text(),ui.cropBotPx,ui.label_7->text(),ui.topBotCropSync);
+    pair(ui.cropLeftPx,ui.label_11->text(),ui.cropRightPx,ui.label_12->text(),ui.leftRightCropSync);
+    for(auto label:{ui.label_10,ui.label_7,ui.label_11,ui.label_12})label->hide();
+    const auto colors=effectPage(ui.tab_2);
+    for(auto group:{ui.extractEnable,ui.colorthresEnable})
+    {
+        auto row=new QWidget(colors->parentWidget());auto layout=new QHBoxLayout(row);layout->setContentsMargins(0,0,0,0);layout->setSpacing(0);
+        auto toggle=effectGroupToggle(group,row);toggle->setText(QString());toggle->setFixedWidth(68);
+        const QString caption=group==ui.extractEnable?qtr("Color Extraction"):qtr("Color Threshold");
+        auto label=new QLabel(caption,row);label->setWordWrap(true);label->setMinimumWidth(0);
+        label->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);layout->addWidget(label,1);
+        layout->addSpacing(4);
+        effectInformation(layout,row,OptionFromWidgetName(group==ui.extractEnable?ui.extractComponentText:ui.colorthresColorText));
+        layout->addSpacing(4);
+        layout->addStretch();
+        layout->addWidget(videoColorField(group==ui.extractEnable?ui.extractComponentText:ui.colorthresColorText,group,row));
+        layout->addSpacing(8);
+        layout->addWidget(toggle);colors->addWidget(row);
+        if(group==ui.colorthresEnable)
+        {
+            colors->addWidget(videoSliderRow(ui.colorthresSaturationthresSlider,ui.label_13->text(),group,colors->parentWidget()));
+            colors->addWidget(videoSliderRow(ui.colorthresSimilaritythresSlider,ui.label_14->text(),group,colors->parentWidget()));
+        }
+    }
+    colors->addWidget(effectCheckbox(ui.invertEnable,colors->parentWidget(),true));
+    colors->addWidget(effectCheckbox(ui.posterizeEnable,colors->parentWidget(),true));
+    colors->addWidget(effectGroupToggle(ui.gradientEnable,colors->parentWidget()));
+    moveEffectWidget(ui.gradientModeCombo,colors->parentWidget());ui.gradientModeCombo->setMinimumHeight(36);colors->addWidget(ui.gradientModeCombo);
+    bindVideoField(ui.gradientEnable,ui.gradientModeCombo);
+    for(auto checkbox:{ui.gradientColorCheck,ui.gradientCartoonCheck}){auto toggle=effectCheckbox(checkbox,colors->parentWidget());bindVideoField(ui.gradientEnable,toggle);colors->addWidget(toggle);}
+    colors->addWidget(effectGroupToggle(ui.sepiaEnable,colors->parentWidget()));
+    auto intensity=new QSlider(Qt::Horizontal,colors->parentWidget());intensity->setObjectName(QStringLiteral("sepiaIntensityPresentation"));
+    intensity->setRange(ui.sepiaIntensitySpin->minimum(),ui.sepiaIntensitySpin->maximum());intensity->setValue(ui.sepiaIntensitySpin->value());
+    QObject::connect(intensity,&QSlider::valueChanged,ui.sepiaIntensitySpin,&QSpinBox::setValue);
+    QObject::connect(ui.sepiaIntensitySpin,qOverload<int>(&QSpinBox::valueChanged),intensity,&QSlider::setValue);
+    // The visible slider drives the existing ranged integer control/callback.
+    intensity->setProperty("effectFilterModule",ModuleFromWidgetName(ui.sepiaEnable));
+    intensity->setProperty("effectOptionName",OptionFromWidgetName(ui.sepiaIntensitySpin));
+    auto intensityRow=videoSliderRow(intensity,qtr("Sepia Intensity"),ui.sepiaEnable,colors->parentWidget());
+    ui.sepiaIntensitySpin->hide();colors->addWidget(intensityRow);
+    Q_UNUSED(tabs);
 }
 
 void ExtVideo::cropChange()
@@ -438,7 +705,7 @@ void ExtVideo::initComboBoxItems( QObject *widget )
 
 void ExtVideo::setWidgetValue( QObject *widget )
 {
-    QString module = ModuleFromWidgetName( widget->parent() );
+    QString module = ModuleForOption(widget);
     //std::cout << "Module name: " << module.toStdString() << std::endl;
     QString option = OptionFromWidgetName( widget );
     //std::cout << "Option name: " << option.toStdString() << std::endl;
@@ -567,7 +834,7 @@ void ExtVideo::setFilterOption( const char *psz_module, const char *psz_option,
 
 void ExtVideo::updateFilterOptions()
 {
-    QString module = ModuleFromWidgetName( sender()->parent() );
+    QString module = ModuleForOption(sender());
     //msg_Dbg( p_intf, "Module name: %s", qtu( module ) );
     QString option = OptionFromWidgetName( sender() );
     //msg_Dbg( p_intf, "Option name: %s", qtu( option ) );
@@ -934,36 +1201,107 @@ void AudioFilterControlWidget::connectConfigChanged( FilterSliderData *slider )
 
 void AudioFilterControlWidget::build()
 {
-    QFont smallFont = QApplication::font();
-    smallFont.setPointSize( smallFont.pointSize() + i_smallfont );
-
     QVBoxLayout *layout = new QVBoxLayout( this );
-    slidersBox = new QGroupBox( qtr( "Enable" ) );
-    slidersBox->setCheckable( true );
-    layout->addWidget( slidersBox );
-
-    QGridLayout *ctrlLayout = new QGridLayout( slidersBox );
-
-    int i = 0;
-    foreach( const FilterSliderData::slider_data_t &data, controls )
+    layout->setContentsMargins(0,0,0,0);
+    layout->setSpacing(12);
+    // Figma's Compressor/Spatializer/Stereo Widener components use a real
+    // disclosure and horizontal caption/value/slider rows. Filter values,
+    // ranges, resolutions and enable actions still use the existing adapter.
+    auto disclosure = new QToolButton(this);
+    disclosure->setObjectName(QStringLiteral("effectSettingsDisclosure"));
+    disclosure->setText(qtr("Collapse Settings")); // Figma 536:1513 / 536:1703 / 612:1223.
+    disclosure->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    disclosure->setArrowType(Qt::DownArrow);
+    disclosure->setCheckable(true);
+    disclosure->setChecked(true);
+    disclosure->setMinimumHeight(48);
+    disclosure->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Fixed);
+    layout->addWidget(disclosure);
+    auto scroll = new QScrollArea(this);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    auto contents = new QWidget(scroll);
+    scroll->setWidget(contents);
+    auto contentsLayout = new QVBoxLayout(contents);
+    contentsLayout->setContentsMargins(16,0,16,20);
+    contentsLayout->setSpacing(20);
+    // Keep the original checked-state/action adapter while presenting its
+    // existing Enable action with the source68x32 ON/OFF component.
+    slidersBox = new QGroupBox(qtr("Enable"),this);
+    slidersBox->setCheckable(true);
+    slidersBox->hide();
+    auto enableToggle = new PreferenceToggle(qtr("Enable"),contents);
+    enableToggle->setObjectName(QStringLiteral("effectEnable"));
+    enableToggle->setFixedHeight(48);
+    contentsLayout->addWidget(enableToggle);
+    connect(enableToggle,&QCheckBox::toggled,slidersBox,&QGroupBox::setChecked);
+    connect(slidersBox,&QGroupBox::toggled,enableToggle,&QCheckBox::setChecked);
+    auto fields = new QWidget(contents);
+    contentsLayout->addWidget(fields,1);
+    layout->addWidget(scroll,1);
+    connect(disclosure,&QToolButton::toggled,scroll,&QWidget::setVisible);
+    connect(disclosure,&QToolButton::toggled,disclosure,[disclosure](bool expanded){
+        disclosure->setText(expanded?qtr("Collapse Settings"):qtr("Expand Settings"));
+        disclosure->setArrowType(expanded?Qt::DownArrow:Qt::RightArrow);
+    });
+    auto ctrlLayout = new QVBoxLayout(fields);
+    ctrlLayout->setContentsMargins(0,0,0,0);
+    ctrlLayout->setSpacing(24);
+    QFont font = QApplication::font();
+    font.setPixelSize(14); // The source components use Inter Regular14.
+    for( const FilterSliderData::slider_data_t &data : controls )
     {
-        QSlider *slider = new QSlider( Qt::Vertical );
-        QLabel *valueLabel = new QLabel();
-        valueLabel->setFont( smallFont );
-        valueLabel->setAlignment( Qt::AlignHCenter );
-        QLabel *nameLabel = new QLabel();
-        nameLabel->setFont( smallFont );
-        nameLabel->setAlignment( Qt::AlignHCenter );
+        auto row = new QWidget(fields);
+        auto rowLayout = new QVBoxLayout(row);
+        rowLayout->setContentsMargins(0,0,0,0);
+        rowLayout->setSpacing(10);
+        auto caption = new QHBoxLayout;
+        caption->setSpacing(10);
+        QSlider *slider = new QSlider( Qt::Horizontal, row );
+        slider->setObjectName(data.name);
+        slider->setProperty("filterOption",true);
+        slider->setMinimumHeight(24);
+        QLabel *valueLabel = new QLabel(row);
+        valueLabel->setFont(font);
+        valueLabel->setAlignment(Qt::AlignRight|Qt::AlignVCenter);
+        QLabel *nameLabel = new QLabel(row);
+        nameLabel->setFont(font);
+        nameLabel->setWordWrap(true);
         FilterSliderData *filter =
             new FilterSliderData( this, p_intf,
                                   slider, valueLabel, nameLabel, & data );
-        ctrlLayout->addWidget( slider, 0, i, Qt::AlignHCenter );
-        ctrlLayout->addWidget( valueLabel, 1, i, Qt::AlignHCenter );
-        ctrlLayout->addWidget( nameLabel, 2, i, Qt::AlignHCenter );
-        i++;
+        nameLabel->setText(nameLabel->text().replace(QChar('\n'),QChar(' ')));
+        const bool available=module_exists(qtu(name));
+        const auto setFieldEnabled=[slider,nameLabel,valueLabel,available](bool enabled){
+            slider->setEnabled(available&&enabled);
+            nameLabel->setEnabled(available&&enabled);
+            valueLabel->setEnabled(available&&enabled);
+        };
+        connect(slidersBox,&QGroupBox::toggled,row,setFieldEnabled);
+        setFieldEnabled(slidersBox->isChecked());
+
+        caption->addWidget(nameLabel);
+        if(auto option=config_FindConfig(qtu(data.name))) {
+            auto help = new QToolButton(row);
+            help->setObjectName(QStringLiteral("preferenceInfo"));
+            help->setIcon(QIcon(QStringLiteral(":/redesign/icons/settings-info.svg")));
+            help->setIconSize(QSize(18,18));
+            help->setAccessibleName(qtr("Help"));
+            help->setAutoRaise(true);
+            help->setToolTip(formatTooltip(qfut(option->psz_longtext&&*option->psz_longtext
+                                               ? option->psz_longtext : option->psz_text)));
+            connect(help,&QToolButton::clicked,help,[help](){showPreferenceHelp(help,help->toolTip());});
+            caption->addWidget(help);
+        }
+        caption->addStretch();
+        caption->addWidget(valueLabel);
+        rowLayout->addLayout(caption);
+        rowLayout->addWidget(slider);
+        ctrlLayout->addWidget(row);
         sliderDatas << filter;
         connectConfigChanged( filter );
     }
+    ctrlLayout->addStretch();
 
     char *psz_af = var_InheritString( p_intf, "audio-filter" );
 
@@ -972,6 +1310,10 @@ void AudioFilterControlWidget::build()
     else
         slidersBox->setChecked( false );
     connect( slidersBox, &QGroupBox::toggled, this, &AudioFilterControlWidget::enable );
+    // A filter absent from this build has no live action to expose.
+    slidersBox->setEnabled(module_exists(qtu(name)));
+    enableToggle->setChecked(slidersBox->isChecked());
+    enableToggle->setEnabled(slidersBox->isEnabled());
 
     free( psz_af );
 }
@@ -1161,12 +1503,35 @@ Equalizer::Equalizer( qt_intf_t *p_intf, QWidget *parent )
 void Equalizer::build()
 {
     QFont smallFont = QApplication::font();
-    smallFont.setPointSize( smallFont.pointSize() + i_smallfont );
+    smallFont.setPixelSize(14);
 
     Ui::EqualizerWidget ui;
     ui.setupUi( this );
 
-    QGridLayout *ctrlLayout = new QGridLayout( ui.slidersPlaceholder );
+    // Supplied Equalizer6114:13610 has the same ten actual bands and a
+    // horizontal caption/value/slider row for each, including Preamp.
+    const auto rows=effectPage(this);
+    auto actions=new QWidget(rows->parentWidget());auto actionLayout=new QHBoxLayout(actions);
+    actionLayout->setContentsMargins(0,0,0,0);actionLayout->setSpacing(20);
+    auto enablePresentation=effectCheckbox(ui.enableCheck,actions);
+    enablePresentation->setEnabled(module_exists("equalizer"));
+    auto passPresentation=effectCheckbox(ui.eq2PassCheck,actions);
+    actionLayout->addWidget(enablePresentation);actionLayout->addWidget(passPresentation);rows->addWidget(actions);
+    auto presetRow=new QWidget(rows->parentWidget());auto presetLayout=new QHBoxLayout(presetRow);
+    presetLayout->setContentsMargins(0,0,0,0);presetLayout->setSpacing(20);
+    moveEffectWidget(ui.presetLabel,presetRow);moveEffectWidget(ui.presetsCombo,presetRow);
+    ui.presetsCombo->setMinimumHeight(36);presetLayout->addWidget(ui.presetLabel);presetLayout->addWidget(ui.presetsCombo,1);
+    rows->addWidget(presetRow);
+    auto preampRow=new QWidget(rows->parentWidget());auto preampLayout=new QVBoxLayout(preampRow);
+    preampLayout->setContentsMargins(0,0,0,0);preampLayout->setSpacing(10);auto preampCaption=new QHBoxLayout;
+    moveEffectWidget(ui.preampLabel,preampRow);moveEffectWidget(ui.preampValue,preampRow);moveEffectWidget(ui.preampSlider,preampRow);
+    preampCaption->addWidget(ui.preampLabel);effectInformation(preampCaption,preampRow,QStringLiteral("equalizer-preamp"));
+    preampCaption->addStretch();preampCaption->addWidget(ui.preampValue);preampLayout->addLayout(preampCaption);
+    ui.preampSlider->setOrientation(Qt::Horizontal);ui.preampSlider->setMinimumHeight(24);ui.preampSlider->setProperty("filterOption",true);
+    preampLayout->addWidget(ui.preampSlider);rows->addWidget(preampRow);
+    moveEffectWidget(ui.slidersPlaceholder,rows->parentWidget());
+    QVBoxLayout *ctrlLayout=new QVBoxLayout(ui.slidersPlaceholder);
+    ctrlLayout->setContentsMargins(0,0,0,0);ctrlLayout->setSpacing(24);rows->addWidget(ui.slidersPlaceholder);
 
     /* set up preamp control */
     ui.preampLabel->setFont( smallFont );
@@ -1175,26 +1540,27 @@ void Equalizer::build()
         ui.preampSlider, ui.preampValue, ui.preampLabel, & preamp_values );
     connectConfigChanged( preamp );
 
-    /* fix sliders spacing accurately */
-    int i_width = qMax( QFontMetrics( smallFont ).horizontalAdvance( "500 Hz" ),
-                        QFontMetrics( smallFont ).horizontalAdvance( "-20.0 dB" ) );
     int i = 0;
     foreach( const FilterSliderData::slider_data_t &data, controls )
     {
-        QSlider *slider = new QSlider( Qt::Vertical );
-        slider->setMinimumWidth( i_width );
-        QLabel *valueLabel = new QLabel();
+        auto row=new QWidget(ui.slidersPlaceholder);auto layout=new QVBoxLayout(row);
+        layout->setContentsMargins(0,0,0,0);layout->setSpacing(10);
+        auto caption=new QHBoxLayout;caption->setSpacing(10);
+        QSlider *slider = new QSlider(Qt::Horizontal,row);
+        slider->setObjectName(QStringLiteral("equalizerBand%1").arg(i));
+        slider->setProperty("filterOption",true);slider->setMinimumHeight(24);
+        QLabel *valueLabel = new QLabel(row);
         valueLabel->setFont( smallFont );
-        valueLabel->setAlignment( Qt::AlignHCenter );
-        QLabel *nameLabel = new QLabel();
+        valueLabel->setAlignment( Qt::AlignRight );
+        QLabel *nameLabel = new QLabel(row);
         nameLabel->setFont( smallFont );
-        nameLabel->setAlignment( Qt::AlignHCenter );
+        nameLabel->setAlignment( Qt::AlignLeft );
         EqualizerSliderData *filter =
             new EqualizerSliderData( this, p_intf,
                                      slider, valueLabel, nameLabel, & data, i );
-        ctrlLayout->addWidget( slider, 0, i, Qt::AlignHCenter );
-        ctrlLayout->addWidget( valueLabel, 2, i, Qt::AlignHCenter );
-        ctrlLayout->addWidget( nameLabel, 1, i, Qt::AlignHCenter );
+        caption->addWidget(nameLabel);effectInformation(caption,row,QStringLiteral("equalizer-bands"));
+        caption->addStretch();caption->addWidget(valueLabel);layout->addLayout(caption);
+        layout->addWidget(slider);ctrlLayout->addWidget(row);
         sliderDatas << filter; /* keep track for applying presets */
         i++;
         connectConfigChanged( filter );
@@ -1240,7 +1606,11 @@ void Equalizer::build()
         ui.presetsCombo->setEnabled( checked );
         ui.presetLabel->setEnabled( checked );
         ui.eq2PassCheck->setEnabled( checked );
-        ui.slidersPlaceholder->setEnabled( checked );
+        passPresentation->setEnabled(checked);
+        // Only real band/value fields are disabled; source info actions
+        // remain usable before the filter is enabled.
+        for(auto slider:ui.slidersPlaceholder->findChildren<QSlider *>()) slider->setEnabled(checked);
+        for(auto caption:ui.slidersPlaceholder->findChildren<QLabel *>()) caption->setEnabled(checked);
         ui.preampSlider->setEnabled( checked );
         ui.preampValue->setEnabled( checked );
         ui.preampLabel->setEnabled( checked );

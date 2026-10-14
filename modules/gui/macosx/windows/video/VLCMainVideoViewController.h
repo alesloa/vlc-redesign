@@ -35,6 +35,8 @@ extern NSString * const VLCUseClassicVideoPlayerLayoutKey;
 
 @interface VLCMainVideoViewController : NSViewController
 
+- (void)closePlayQueuePane;
+
 @property (readwrite, weak) IBOutlet NSView *voutContainingView;
 
 @property (readwrite, weak) IBOutlet VLCVoutView *voutView;
@@ -50,11 +52,13 @@ extern NSString * const VLCUseClassicVideoPlayerLayoutKey;
 @property (readwrite, weak) IBOutlet NSLayoutConstraint *playQueueButtonTopConstraint;
 @property (readwrite, weak) IBOutlet NSLayoutConstraint *playQueueButtonTrailingConstraint;
 @property (readwrite, strong) IBOutlet NSLayoutConstraint *videoViewBottomConstraint;
-@property (readwrite, weak) IBOutlet NSVisualEffectView *fakeTitleBar;
+@property (readwrite, weak) IBOutlet NSView *fakeTitleBar;
 @property (readwrite, weak) IBOutlet NSLayoutConstraint *fakeTitleBarHeightConstraint;
 @property (readwrite, weak) IBOutlet NSProgressIndicator *loadingIndicator;
 @property (readwrite, weak) IBOutlet NSImageView *floatOnTopIndicatorImageView;
 @property (readwrite, weak) IBOutlet NSView *classicViewBottomBarContainerView;
+
+- (void)prepareControlsForWidth:(CGFloat)width;
 
 @property (readwrite, weak) IBOutlet NSLayoutConstraint *playButtonSizeConstraint;
 @property (readwrite, weak) IBOutlet NSLayoutConstraint *prevButtonSizeConstraint;
@@ -69,6 +73,7 @@ extern NSString * const VLCUseClassicVideoPlayerLayoutKey;
 @property (readonly, strong) VLCMainVideoViewAudioMediaDecorativeView *audioDecorativeView;
 @property (readwrite, nonatomic) BOOL autohideControls;
 @property (readwrite, nonatomic) BOOL displayLibraryControls;
+@property (readwrite, nonatomic) BOOL statisticsVisible;
 @property (readonly) BOOL mouseOnControls;
 @property (readonly) BOOL pipIsActive;
 
@@ -83,6 +88,7 @@ extern NSString * const VLCUseClassicVideoPlayerLayoutKey;
 
 - (IBAction)togglePlayQueue:(id)sender;
 - (IBAction)returnToLibrary:(id)sender;
+- (IBAction)customizePlayer:(id)sender;
 
 @end
 
