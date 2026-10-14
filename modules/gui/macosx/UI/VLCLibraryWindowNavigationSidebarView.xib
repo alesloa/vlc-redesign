@@ -63,17 +63,15 @@
                                                 </connections>
                                             </tableCellView>
                                             <tableCellView identifier="VLCLibrarySegmentCellIdentifier" id="FOz-uD-GU6">
-                                                <rect key="frame" x="11" y="0.0" width="140" height="0.0"/>
+                                                <rect key="frame" x="11" y="0.0" width="140" height="40"/>
                                                 <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                 <subviews>
-                                                    <imageView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="g5f-nN-6XM">
-                                                        <rect key="frame" x="3" y="-17" width="17" height="17"/>
-                                                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                                    <imageView translatesAutoresizingMaskIntoConstraints="NO" id="g5f-nN-6XM">
+                                                        <rect key="frame" x="3" y="11.5" width="17" height="17"/>
                                                         <imageCell key="cell" refusesFirstResponder="YES" imageScaling="proportionallyDown" image="NSActionTemplate" id="iLQ-Rx-S8F"/>
                                                     </imageView>
-                                                    <textField focusRingType="none" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="9Av-FK-YYz">
-                                                        <rect key="frame" x="25" y="-17" width="115" height="17"/>
-                                                        <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMinY="YES"/>
+                                                    <textField focusRingType="none" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="9Av-FK-YYz">
+                                                        <rect key="frame" x="25" y="10.5" width="115" height="19"/>
                                                         <textFieldCell key="cell" lineBreakMode="truncatingTail" sendsActionOnEndEditing="YES" title="Table View Cell" id="maG-3E-S0m">
                                                             <font key="font" metaFont="system"/>
                                                             <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
@@ -81,6 +79,15 @@
                                                         </textFieldCell>
                                                     </textField>
                                                 </subviews>
+                                                <constraints>
+                                                    <constraint firstItem="g5f-nN-6XM" firstAttribute="leading" secondItem="FOz-uD-GU6" secondAttribute="leading" constant="3" id="Nav-Icon-Leading"/>
+                                                    <constraint firstItem="g5f-nN-6XM" firstAttribute="centerY" secondItem="FOz-uD-GU6" secondAttribute="centerY" id="Nav-Icon-CenterY"/>
+                                                    <constraint firstItem="g5f-nN-6XM" firstAttribute="width" constant="17" id="Nav-Icon-Width"/>
+                                                    <constraint firstItem="g5f-nN-6XM" firstAttribute="height" constant="17" id="Nav-Icon-Height"/>
+                                                    <constraint firstItem="9Av-FK-YYz" firstAttribute="leading" secondItem="g5f-nN-6XM" secondAttribute="trailing" constant="5" id="Nav-Text-Leading"/>
+                                                    <constraint firstAttribute="trailing" secondItem="9Av-FK-YYz" secondAttribute="trailing" id="Nav-Text-Trailing"/>
+                                                    <constraint firstItem="9Av-FK-YYz" firstAttribute="centerY" secondItem="FOz-uD-GU6" secondAttribute="centerY" id="Nav-Text-CenterY"/>
+                                                </constraints>
                                                 <connections>
                                                     <outlet property="imageView" destination="g5f-nN-6XM" id="R33-R1-9wo"/>
                                                     <outlet property="textField" destination="9Av-FK-YYz" id="sWz-d6-9rY"/>
