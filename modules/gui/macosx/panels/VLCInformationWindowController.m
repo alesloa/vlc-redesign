@@ -21,6 +21,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
  ******************************************************************************/
 
+#import "extensions/NSWindow+VLCAdditions.h"
 #import "VLCInformationWindowController.h"
 
 #import "extensions/NSImage+VLCAdditions.h"
@@ -113,6 +114,7 @@ actionCallback(encodedBy);
 
 - (void)awakeFromNib
 {
+    [self.window vlc_applyRedesignDialogShell];
     _statisticsEnabled = var_InheritBool(getIntf(), "stats");
 
     [self.window setExcludedFromWindowsMenu: YES];

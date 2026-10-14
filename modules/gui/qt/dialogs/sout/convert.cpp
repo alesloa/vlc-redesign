@@ -36,6 +36,7 @@
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QCheckBox>
+#include <QToolButton>
 
 #define urlToDisplayString(filestr) toNativeSeparators(QUrl(filestr).toDisplayString(\
     QUrl::RemovePassword | QUrl::PreferLocalFile | QUrl::NormalizePathSegments ))
@@ -47,8 +48,30 @@ ConvertDialog::ConvertDialog( QWindow *parent, qt_intf_t *_p_intf,
 {
     setWindowTitle( qtr( "Convert" ) );
     setWindowRole( "vlc-convert" );
+    setObjectName(QStringLiteral("convertMediaDialog"));
 
-    QGridLayout *mainLayout = new QGridLayout( this );
+    auto shell = new QVBoxLayout(this);
+    shell->setContentsMargins(0,0,0,0);
+    shell->setSpacing(0);
+    auto header = new QWidget(this);
+    header->setObjectName(QStringLiteral("preferencesHeader"));
+    header->setFixedHeight(50);
+    auto heading = new QHBoxLayout(header);
+    heading->setContentsMargins(20,9,9,9);
+    heading->addWidget(new QLabel(windowTitle(),header),1);
+    auto close = new QToolButton(header);
+    close->setIcon(QIcon(QStringLiteral(":/redesign/icons/settings-close.svg")));
+    close->setIconSize(QSize(24,24));
+    close->setFixedSize(32,32);
+    close->setAccessibleName(qtr("Close"));
+    connect(close,&QToolButton::clicked,this,&ConvertDialog::reject);
+    heading->addWidget(close);
+    shell->addWidget(header);
+    auto body = new QWidget(this);
+    QGridLayout *mainLayout = new QGridLayout(body);
+    mainLayout->setContentsMargins(24,20,24,20);
+    mainLayout->setVerticalSpacing(20);
+    shell->addWidget(body,1);
     SoutInputBox *inputBox = new SoutInputBox( this );
     incomingMRLs = &inputMRLs;
 
@@ -141,10 +164,23 @@ ConvertDialog::ConvertDialog( QWindow *parent, qt_intf_t *_p_intf,
     buttonBox->addButton( okButton, QDialogButtonBox::AcceptRole );
     buttonBox->addButton( cancelButton, QDialogButtonBox::RejectRole );
 
-    mainLayout->addWidget( buttonBox, 5, 3 );
+    auto footer = new QWidget(this);
+    footer->setFixedHeight(72);
+    auto footerLayout = new QHBoxLayout(footer);
+    footerLayout->setContentsMargins(20,20,20,20);
+    buttonBox->removeButton(cancelButton);
+    buttonBox->removeButton(okButton);
+    cancelButton->setFixedSize(100,32);
+    okButton->setFixedSize(100,32);
+    footerLayout->addWidget(cancelButton);
+    footerLayout->addStretch();
+    footerLayout->addWidget(okButton);
+    shell->addWidget(footer);
+    buttonBox->setParent(footer);
+    buttonBox->hide();
 
-    connect( buttonBox, &QDialogButtonBox::accepted, this, &ConvertDialog::accept );
-    connect( buttonBox, &QDialogButtonBox::rejected, this, &ConvertDialog::reject );
+    connect(okButton,&QPushButton::clicked,this,&ConvertDialog::accept);
+    connect(cancelButton,&QPushButton::clicked,this,&ConvertDialog::reject);
 
     connect( convertRadio, &QRadioButton::toggled, convertPanel, &QWidget::setEnabled );
     connect( profile, &VLCProfileSelector::optionsChanged, this, &ConvertDialog::setDestinationFileExtension );
@@ -152,6 +188,7 @@ ConvertDialog::ConvertDialog( QWindow *parent, qt_intf_t *_p_intf,
     connect( fileLine, &QLineEdit::textChanged, this, &ConvertDialog::validate );
 
     validate();
+    resize(713,589); // Geometry of the supplied compact Figma modal component.
 }
 
 void ConvertDialog::fileBrowse()

@@ -47,5 +47,9 @@ typedef struct intf_thread_t intf_thread_t;
 @property(strong, readonly) NSImage *vlcAppIconImage;
 @property(assign, readonly) BOOL winterHolidaysTheming;
 
+@property (readonly) NSInteger interfaceAppearance;
+- (void)changeInterfaceAppearance:(NSPopUpButton *)sender;
+- (void)applyInterfaceAppearance;
+- (void)showWelcomeIfNeeded;
 - (void)setIntf:(intf_thread_t *)intf;
 @end

@@ -24,6 +24,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
  *****************************************************************************/
 
+#import "extensions/NSWindow+VLCAdditions.h"
 #import "VLCOpenWindowController.h"
 
 #import <Cocoa/Cocoa.h>
@@ -41,6 +42,8 @@
 #import "playqueue/VLCPlayQueueController.h"
 #import "windows/convertandsave/VLCOutput.h"
 #import "windows/VLCOpenInputMetadata.h"
+#import "library/VLCLibraryMediaCollectionController.h"
+#import "library/VLCLibraryController.h"
 
 NSString *const VLCOpenFileTabViewId = @"file";
 NSString *const VLCOpenDiscTabViewId = @"disc";
@@ -127,6 +130,7 @@ NSString *const VLCOpenTextFieldWasClicked = @"VLCOpenTextFieldWasClicked";
 
 - (void)windowDidLoad
 {
+    [self.window vlc_applyRedesignDialogShell];
     _output = [VLCOutput new];
 
     [self.window setCollectionBehavior: NSWindowCollectionBehaviorFullScreenAuxiliary];
@@ -533,6 +537,28 @@ NSString *const VLCOpenTextFieldWasClicked = @"VLCOpenTextFieldWasClicked";
 
 - (void)openNet
 {
+    VLCLibraryMediaCollectionController *dialog = [[VLCLibraryMediaCollectionController alloc] initForNetwork:YES initialURLs:@[]];
+    dialog.allowsPlaylistSaving = VLCMain.sharedInstance.libraryController.libraryModel != nil;
+    NSModalResponse response;
+    do {
+        response = [dialog runModal];
+        if (response != NSModalResponseOK || !dialog.playlistName.length) break;
+        if ([VLCMain.sharedInstance.libraryController createPlaylistWithName:dialog.playlistName mediaURLs:dialog.mediaURLs coverURL:nil]) return;
+    } while (!VLCMain.sharedInstance.isTerminating);
+    if (response == NSModalResponseOK) {
+        if (dialog.playlistName.length) {
+            return;
+        } else {
+            NSMutableArray *items = [NSMutableArray array];
+            for (NSURL *url in dialog.mediaURLs) {
+                VLCOpenInputMetadata *item = [[VLCOpenInputMetadata alloc] init]; item.MRLString = url.absoluteString; [items addObject:item];
+            }
+            [VLCMain.sharedInstance.playQueueController addPlayQueueItems:items atPosition:-1 startPlayback:YES];
+        }
+        return;
+    }
+    if (response != 2) return;
+    // Keep VLC's existing per-stream options, UDP/RTP, output and timing UI.
     [self openNetInfoChanged: nil];
     [self openTarget: VLCOpenNetworkTabViewId];
     [_netHTTPURLTextField selectText:nil];

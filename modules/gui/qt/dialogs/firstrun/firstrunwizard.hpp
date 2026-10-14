@@ -25,6 +25,7 @@
 
 class MLFoldersEditor;
 class MLFoldersModel;
+class QLineEdit;
 
 class FirstRunWizard : public QWizard
 {
@@ -32,7 +33,7 @@ class FirstRunWizard : public QWizard
 
 public:
     explicit FirstRunWizard ( qt_intf_t*, QWidget* parent = nullptr );
-    enum { WELCOME_PAGE, FOLDER_PAGE, COLOR_SCHEME_PAGE, LAYOUT_PAGE };
+    enum { WELCOME_PAGE, FOLDER_PAGE, COLOR_SCHEME_PAGE, LAYOUT_PAGE, HOTKEYS_PAGE, INTRO_PAGE };
     enum { MODERN, CLASSIC };
 
     void addDefaults();
@@ -53,6 +54,8 @@ private:
     QButtonGroup* colorSchemeGroup = nullptr;
     QButtonGroup* colorSchemeImages = nullptr;
     QButtonGroup* layoutImages = nullptr;
+    QLineEdit *m_introFolder = nullptr;
+    QLineEdit *m_accentValue = nullptr;
 
 private slots:
     void finish();

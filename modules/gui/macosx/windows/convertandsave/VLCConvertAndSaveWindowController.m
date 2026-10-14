@@ -20,6 +20,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
  *****************************************************************************/
 
+#import "extensions/NSWindow+VLCAdditions.h"
 #import "VLCConvertAndSaveWindowController.h"
 
 #import "extensions/NSString+Helpers.h"
@@ -142,6 +143,7 @@ NSString *VLCConvertAndSaveProfileNamesKey = @"CASProfileNames";
 
 - (void)windowDidLoad
 {
+    [self.window vlc_applyRedesignDialogShell];
     [self initStrings];
 
     /* there is no way to hide single cells, so replace the existing ones with empty cells.. */

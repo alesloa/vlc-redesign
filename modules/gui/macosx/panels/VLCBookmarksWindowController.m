@@ -33,6 +33,7 @@
  * Preamble
  *****************************************************************************/
 
+#import "extensions/NSWindow+VLCAdditions.h"
 #import "VLCBookmarksWindowController.h"
 
 #import "bookmarks/VLCBookmark.h"
@@ -82,6 +83,7 @@
 
 - (void)windowDidLoad
 {
+    [self.window vlc_applyRedesignDialogShell];
     [self.window setCollectionBehavior: NSWindowCollectionBehaviorFullScreenAuxiliary];
 
     _tableViewDataSource = [[VLCBookmarksTableViewDataSource alloc] initWithTableView:_dataTable];

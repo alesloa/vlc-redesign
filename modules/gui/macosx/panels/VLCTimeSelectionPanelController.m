@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
  *****************************************************************************/
 
+#import "extensions/NSWindow+VLCAdditions.h"
 #import "VLCTimeSelectionPanelController.h"
 
 #import "extensions/NSString+Helpers.h"
@@ -44,6 +45,7 @@
 
 - (void)windowDidLoad
 {
+    [self.window vlc_applyRedesignDialogShell];
     [_cancelButton setTitle:_NS("Cancel")];
     [_okButton setTitle:_NS("OK")];
     [_secsLabel setStringValue:_NS("sec")];

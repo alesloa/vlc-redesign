@@ -43,10 +43,12 @@ SoutDialog::SoutDialog( QWindow *parent, qt_intf_t *_p_intf, const QString& inpu
 
     setWindowTitle( qtr( "Stream Output" ) );
     setWindowRole( "vlc-stream-output" );
+    setObjectName(QStringLiteral("streamOutputDialog"));
 
     // NOTE: Aero style seems to be incompatible with
     //       Qt Modern Windows Style dark mode
-    setWizardStyle(QWizard::ModernStyle);
+    setWizardStyle(QWizard::ClassicStyle);
+    setContentsMargins(20,20,20,20);
 
     QVLCDialog::setWindowTransientParent(this, parent , p_intf);
 
@@ -96,6 +98,14 @@ SoutDialog::SoutDialog( QWindow *parent, qt_intf_t *_p_intf, const QString& inpu
     setButtonText( QWizard::CancelButton, qtr("Cancel") );
     setButtonText( QWizard::NextButton, qtr("Next") );
     setButtonText( QWizard::FinishButton, qtr("Stream") );
+    setButtonLayout({QWizard::CancelButton,QWizard::Stretch,QWizard::BackButton,
+                     QWizard::NextButton,QWizard::FinishButton});
+    for(auto which : {QWizard::BackButton,QWizard::CancelButton,QWizard::NextButton,QWizard::FinishButton})
+        if(auto control=button(which)) {
+            control->setFixedHeight(32);
+            control->setMinimumWidth(100);
+        }
+    resize(1048,800);
 }
 
 void SoutDialog::closeTab( int i )

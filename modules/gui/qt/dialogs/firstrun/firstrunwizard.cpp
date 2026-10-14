@@ -21,10 +21,22 @@
 #include "maininterface/mainctx.hpp"
 #include "dialogs/toolbar/controlbar_profile_model.hpp"
 #include "medialibrary/medialib.hpp"
+#include "dialogs/preferences/preferences_widgets.hpp"
 
 #include <QPushButton>
 #include <QButtonGroup>
 #include <QFileDialog>
+#include <QTreeWidget>
+#include <QHeaderView>
+#include <QVBoxLayout>
+#include <QGridLayout>
+#include <QLineEdit>
+#include <QLabel>
+#include <QPainter>
+#include <QPainterPath>
+#include <QApplication>
+#include <QLinearGradient>
+#include <QKeySequence>
 
 #include <vlc_common.h>
 #include <vlc_configuration.h>
@@ -43,9 +55,166 @@ FirstRunWizard::FirstRunWizard( qt_intf_t *_p_intf, QWidget *parent)
     // NOTE: Aero style seems to be incompatible with
     //       Qt Modern Windows Style dark mode
     setWizardStyle(QWizard::ModernStyle);
+    // Navigation labels are published by the onboarding Figma frames.
+    setButtonText( QWizard::NextButton, qtr("Next") );
+    setButtonText( QWizard::BackButton, qtr("Back") );
+    setButtonText( QWizard::FinishButton, qtr("Finish") );
 
     /* Build the Ui */
     ui.setupUi( this );
+    // QWizard owns its internal layout; it does not expose a QWidget layout
+    // during construction. Apply Figma's footer margins through the public API.
+    setContentsMargins( 0, 0, 62, 56 );
+    for( auto role : {QWizard::NextButton, QWizard::BackButton, QWizard::FinishButton} )
+        button(role)->setFixedSize( 100, 32 );
+
+    // Qt's native wizard header derives point sizes from the application font;
+    // use the existing source labels in the page when the app uses pixel fonts.
+    ui.welcomePage->setTitle( QString() );
+    ui.folderPage->setTitle( QString() );
+    ui.colorSchemePage->setTitle( QString() );
+    ui.layoutPage->setTitle( QString() );
+    ui.colorLabel->hide();
+    ui.policy->setFrameShape( QFrame::NoFrame );
+
+    // Welcome copy, cone and geometry are from Figma 1899:3055.
+    auto intro = new QWizardPage( this );
+    auto intro_layout = new QVBoxLayout( intro );
+    intro_layout->setContentsMargins( 62, 72, 62, 24 );
+    intro_layout->setSpacing( 32 );
+    auto cone = new QLabel( intro );
+    cone->setPixmap( QPixmap(QStringLiteral(":/redesign/icons/onboarding-cone.svg")) );
+    cone->setFixedSize( 141, 141 );
+    intro_layout->addWidget( cone, 0, Qt::AlignHCenter );
+    auto welcome = new QLabel( qtr("Welcome to VLC!"), intro );
+    QFont welcome_font = QApplication::font();
+    welcome_font.setPixelSize( 32 );
+    welcome_font.setWeight( QFont::Light );
+    welcome->setFont( welcome_font );
+    intro_layout->addWidget( welcome, 0, Qt::AlignHCenter );
+    auto introduction = new QLabel( qtr("VLC is a free and open source cross-platform multimedia player and framework "
+        "that plays most multimedia files as well as DVDs, Audio CDs, VCDs, and various streaming protocols."), intro );
+    introduction->setWordWrap( true );
+    introduction->setFixedWidth( 595 );
+    QFont body_font = QApplication::font();
+    body_font.setPixelSize( 16 );
+    body_font.setWeight( QFont::Light );
+    introduction->setFont( body_font );
+    QSizePolicy wrapped_policy( QSizePolicy::Fixed, QSizePolicy::MinimumExpanding );
+    wrapped_policy.setHeightForWidth( true );
+    introduction->setSizePolicy( wrapped_policy );
+    introduction->setMinimumHeight( introduction->heightForWidth(595) );
+    intro_layout->addWidget( introduction, 0, Qt::AlignHCenter );
+    auto folder_area = new QWidget( intro );
+    folder_area->setFixedWidth( 595 );
+    auto folder_layout = new QGridLayout( folder_area );
+    folder_layout->setContentsMargins( 0, 0, 0, 0 );
+    folder_layout->setHorizontalSpacing( 10 );
+    folder_layout->setVerticalSpacing( 16 );
+    folder_layout->addWidget( new QLabel(qtr("Choose a Media Folder to get started with"), folder_area), 0, 0, 1, 2 );
+    m_introFolder = new QLineEdit( folder_area );
+    m_introFolder->setReadOnly( true );
+    m_introFolder->setMinimumHeight( 36 );
+    folder_layout->addWidget( m_introFolder, 1, 0 );
+    auto browse_folder = new QPushButton( qtr("Browse"), folder_area );
+    browse_folder->setMinimumHeight( 36 );
+    browse_folder->setFixedWidth( 114 );
+    folder_layout->addWidget( browse_folder, 1, 1 );
+    folder_area->setVisible( vlc_ml_instance_get(p_intf) != nullptr );
+    connect( browse_folder, &QPushButton::clicked, this, &FirstRunWizard::MLaddNewFolder );
+    intro_layout->addWidget( folder_area, 0, Qt::AlignHCenter );
+    intro_layout->addStretch();
+    setPage( INTRO_PAGE, intro );
+    setStartId( INTRO_PAGE );
+    resize( 1090, 759 );
+
+    // Figma 1902:6770 defines the two-column guide; values use live config.
+    auto shortcuts_page = new QWizardPage( this );
+    auto shortcuts_layout = new QVBoxLayout( shortcuts_page );
+    shortcuts_layout->setContentsMargins( 62, 44, 62, 24 );
+    shortcuts_layout->setSpacing( 40 );
+    auto guide_title = new QLabel( qtr("Learn the basic keyboard shortcuts."), shortcuts_page );
+    QFont guide_font = QApplication::font();
+    guide_font.setPixelSize( 24 );
+    guide_title->setFont( guide_font );
+    shortcuts_layout->addWidget( guide_title, 0, Qt::AlignHCenter );
+    auto shortcuts = new QWidget( shortcuts_page );
+    shortcuts->setObjectName( QStringLiteral("onboardingShortcuts") );
+    auto shortcut_grid = new QGridLayout( shortcuts );
+    shortcut_grid->setHorizontalSpacing( 20 ); // Figma's space between labels and bindings.
+    shortcut_grid->setVerticalSpacing( 16 );
+    struct GuideRow { const char *title; const char *first; const char *second; int column; };
+    const GuideRow actions[] = {
+        {N_("Play / Pause"), "key-play-pause", nullptr, 0},
+        {N_("Seek Backward / Forward"), "key-jump-short", "key-jump+short", 0},
+        {N_("Previous / Next Item"), "key-prev", "key-next", 0},
+        {N_("Previous / Next Frame"), "key-frame-previous", "key-frame-next", 0},
+        {N_("Cycle Subtitle Track"), "key-subtitle-track", nullptr, 0},
+        {N_("Cycle Audio Track"), "key-audio-track", nullptr, 0},
+        {N_("Toggle Fullscreen"), "key-toggle-fullscreen", nullptr, 1},
+        {N_("Increase / Decrease Volume"), "key-vol-up", "key-vol-down", 1},
+        {N_("Show / Hide Queue"), nullptr, nullptr, 1},
+        {N_("Take a Snapshot"), "key-snapshot", nullptr, 1},
+        {N_("Record"), "key-record", nullptr, 1}
+    };
+    int rows[] = {0, 0};
+    for( const auto &action : actions )
+    {
+        if( action.first && !config_FindConfig(action.first) )
+            continue;
+        auto label = new QLabel( qfut(action.title), shortcuts );
+        label->setFont( body_font );
+        label->setMinimumWidth( label->fontMetrics().horizontalAdvance(label->text()) );
+        auto caps = new QWidget( shortcuts );
+        // Actual configured combinations can be much longer than Figma's
+        // sample keys. Give paired bindings separate rows rather than cropping.
+        auto caps_layout = new QBoxLayout( action.second ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight, caps );
+        caps_layout->setContentsMargins( 0, 0, 0, 6 );
+        caps_layout->setSpacing( action.second ? 6 : 10 );
+        for( const char *name : {action.first, action.second} )
+        {
+            if( !name && action.first )
+                continue;
+            QString keys;
+            if( name )
+            {
+                auto binding = vlc::wrap_cptr( config_GetPsz(name) );
+                keys = qfu(binding.get());
+            }
+            else
+                // The original menus/qml/GlobalShortcuts.qml sequence, displayed
+                // by Qt's platform-native formatter (Command on macOS).
+                keys = QKeySequence(QStringLiteral("Ctrl+L")).toString(QKeySequence::NativeText);
+            auto cap = new QLabel( keys.replace('\t', QStringLiteral(", ")), caps );
+            cap->setObjectName( QStringLiteral("onboardingKeycap") );
+            cap->setAlignment( Qt::AlignCenter );
+            cap->setFont( body_font );
+            cap->setMinimumWidth( cap->fontMetrics().horizontalAdvance(cap->text()) + 30 );
+            cap->setSizePolicy( QSizePolicy::MinimumExpanding, QSizePolicy::Preferred );
+            cap->setMinimumHeight( 40 );
+            cap->setStyleSheet( QStringLiteral("border-radius: 12px; padding: 4px 12px;") );
+            caps_layout->addWidget( cap );
+            if( !action.first )
+                break;
+        }
+        if( !action.second )
+            caps_layout->addStretch();
+        shortcut_grid->addWidget( label, rows[action.column], action.column * 2 );
+        shortcut_grid->addWidget( caps, rows[action.column]++, action.column * 2 + 1 );
+    }
+    shortcuts_layout->addWidget( shortcuts );
+    shortcuts_layout->addStretch();
+    shortcuts_layout->addWidget( new QLabel(qtr("Find the full list in the menu."), shortcuts_page) );
+    setPage( HOTKEYS_PAGE, shortcuts_page );
+    for( auto label : {ui.privacy, ui.folderLabel, ui.layoutLabel} )
+    {
+        label->setFont( guide_font );
+        label->setWordWrap( true );
+        label->setMinimumHeight( label->fontMetrics().height() );
+    }
+    ui.addButton->setMinimumSize( 32, 32 );
+    ui.addButton->setMaximumSize( 32, 32 );
+    ui.addButton->setStyleSheet( QStringLiteral("padding: 0;") );
 
     /* Set the privacy and network policy */
     ui.policy->setHtml( qtr( "<p>In order to protect your privacy, <i>VLC media player</i> "
@@ -76,7 +245,81 @@ FirstRunWizard::FirstRunWizard( qt_intf_t *_p_intf, QWidget *parent)
     colorSchemeImages->addButton( ui.lightImage );
     colorSchemeImages->addButton( ui.darkImage );
 
+    // The theme-card geometry, fills, type and copy are from Figma 1902:3670.
+    // Keep the original radio choices and model IDs, including System by default.
+    delete ui.colorSchemePage->layout();
+    ui.colorSchemePage->setTitle( QString() );
+    auto theme_layout = new QVBoxLayout( ui.colorSchemePage );
+    theme_layout->setContentsMargins( 62, 44, 62, 24 );
+    theme_layout->setSpacing( 40 );
+    auto theme_title = new QLabel( qtr("Select your preferred theme and color."), ui.colorSchemePage );
+    auto theme_font = guide_font;
+    theme_font.setWeight( QFont::Light );
+    theme_title->setFont( theme_font );
+    theme_layout->addWidget( theme_title, 0, Qt::AlignHCenter );
+    theme_layout->addStretch();
+    auto theme_cards = new QHBoxLayout;
+    theme_cards->setSpacing( 40 );
+    theme_cards->addStretch();
+    for( auto pair : {qMakePair(ui.lightImage, ui.lightButton), qMakePair(ui.darkImage, ui.darkButton),
+                     qMakePair(ui.daynightImage, ui.systemButton)} )
+    {
+        auto card = new QVBoxLayout;
+        card->setSpacing( 22 );
+        const qreal ratio = devicePixelRatioF();
+        QPixmap sample( QSize(100, 100) * ratio );
+        sample.setDevicePixelRatio( ratio );
+        sample.fill( Qt::transparent );
+        QPainter painter( &sample );
+        painter.setRenderHint( QPainter::Antialiasing );
+        QPainterPath shape;
+        shape.addRoundedRect( QRectF(0, 0, 100, 100), 12, 12 );
+        if( pair.first == ui.daynightImage )
+        {
+            // Figma's 238.72740368986226deg hard-stop diagonal theme sample.
+            QLinearGradient fill( QPointF(100, 19.64), QPointF(0, 80.36) );
+            fill.setColorAt( 0, QColor("#AFAFAF") );
+            fill.setColorAt( 0.52411, QColor("#AFAFAF") );
+            fill.setColorAt( 0.52412, QColor("#222222") );
+            fill.setColorAt( 1, QColor("#222222") );
+            painter.fillPath( shape, fill );
+        }
+        else
+            painter.fillPath( shape, pair.first == ui.lightImage ? QColor("#AFAFAF") : QColor("#222222") );
+        painter.end();
+        pair.first->setIcon( QIcon(sample) );
+        pair.first->setObjectName( QStringLiteral("onboardingThemeCard") );
+        pair.first->setIconSize( QSize(100, 100) );
+        pair.first->setFixedSize( 124, 124 );
+        pair.first->setCheckable( true );
+        pair.first->setAutoExclusive( true );
+        pair.first->setStyleSheet( QStringLiteral("QPushButton { background: transparent;"
+            "border-radius: 19px; padding: 8px; }") );
+        pair.second->setFont( body_font );
+        card->addWidget( pair.first, 0, Qt::AlignHCenter );
+        card->addWidget( pair.second, 0, Qt::AlignHCenter );
+        connect( pair.second, &QRadioButton::toggled, pair.first, &QPushButton::setChecked );
+        pair.first->setChecked( pair.second->isChecked() );
+        theme_cards->addLayout( card );
+    }
+    theme_cards->addStretch();
+    theme_layout->addLayout( theme_cards );
+    ui.explainerLabel->setFixedWidth( 595 );
+    ui.explainerLabel->setSizePolicy( wrapped_policy );
+    ui.explainerLabel->setMinimumHeight( ui.explainerLabel->heightForWidth(595) );
+    theme_layout->addWidget( ui.explainerLabel, 0, Qt::AlignHCenter );
+    theme_layout->addStretch();
+    if( auto option = config_FindConfig("qt-accent-color") )
+    {
+        m_accentValue = new QLineEdit( ui.colorSchemePage );
+        m_accentValue->setText( qfu(option->value.psz) );
+        m_accentValue->hide();
+        theme_layout->addWidget( createAccentColorSelector(ui.colorSchemePage, m_accentValue, 64), 0, Qt::AlignLeft );
+    }
+
     /* Setup the layout page */
+    ui.modernImage->hide();
+    ui.classicImage->hide();
     ui.layoutGroup->setId( ui.modernButton, 0 );
     ui.layoutGroup->setId( ui.classicButton, 1 );
 
@@ -118,6 +361,7 @@ FirstRunWizard::FirstRunWizard( qt_intf_t *_p_intf, QWidget *parent)
 
     /* Disable the ML button as toggling doesn't actually do anything */
     ui.enableMl->setEnabled(false);
+    ui.enableMl->hide(); // Keep its existing route/default state, without a nonfunctional control.
 
     /* Slots and Signals */
     connect( ui.addButton, &QPushButton::clicked, this, &FirstRunWizard::MLaddNewFolder );
@@ -140,6 +384,8 @@ void FirstRunWizard::finish()
 
     /* Colour Page settings */
     p_intf->p_mi->getColorScheme()->setCurrentIndex( colorSchemeGroup->checkedId() );
+    if( m_accentValue )
+        config_PutPsz( "qt-accent-color", qtu(m_accentValue->text()) );
 
     /* Layout Page settings */
     config_PutInt( "qt-menubar", ui.layoutGroup->checkedId() );
@@ -185,11 +431,18 @@ void FirstRunWizard::finish()
  */
 void FirstRunWizard::MLaddNewFolder()
 {
+    if( !mlFoldersEditor )
+        return;
     QUrl newEntryPoint = QFileDialog::getExistingDirectoryUrl( this, qtr("Choose a folder to add to the Media Library"),
                                                                QUrl( QDir::homePath() ));
 
-    if( !newEntryPoint.isEmpty() && !mlFoldersEditor->contains( newEntryPoint ) )
-        mlFoldersEditor->add( newEntryPoint );
+    if( !newEntryPoint.isEmpty() )
+    {
+        addDefaults(); // Preserve the original folder-page defaults before adding a choice.
+        if( !mlFoldersEditor->contains( newEntryPoint ) )
+            mlFoldersEditor->add( newEntryPoint );
+        m_introFolder->setText( newEntryPoint.toDisplayString(QUrl::PreferLocalFile) );
+    }
 }
 
 /**
@@ -264,6 +517,8 @@ int FirstRunWizard::nextId() const
 {
     switch ( currentId() )
     {
+        case INTRO_PAGE:
+            return WELCOME_PAGE;
         case WELCOME_PAGE:
             if( ui.enableMl->isChecked() )
                 return FOLDER_PAGE;
@@ -273,6 +528,8 @@ int FirstRunWizard::nextId() const
             return COLOR_SCHEME_PAGE;
         case COLOR_SCHEME_PAGE:
             return LAYOUT_PAGE;
+        case LAYOUT_PAGE:
+            return HOTKEYS_PAGE;
         default:
             return -1;
     }
@@ -299,7 +556,9 @@ void FirstRunWizard::initializePage( int id )
         {
             colorSchemeGroup->setId( schemeButtons.at(i), schemes.at(i).scheme );
             colorSchemeImages->setId( schemeImages.at(i), schemes.at(i).scheme );
-            schemeButtons.at(i)->setText( schemes.at(i).text );
+            // Display names come from Figma 1902:3670; model IDs stay unchanged.
+            schemeButtons.at(i)->setText( schemes.at(i).scheme == ColorSchemeModel::System ? qtr("System") :
+                schemes.at(i).scheme == ColorSchemeModel::Day ? qtr("Light") : qtr("Dark") );
             if( !i ) updateColorLabel( schemeButtons.at(i) );
         }
     }

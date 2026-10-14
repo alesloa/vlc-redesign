@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
  *****************************************************************************/
 
+#import "extensions/NSWindow+VLCAdditions.h"
 #import "VLCAddonsWindowController.h"
 
 #import <vlc_common.h>
@@ -96,6 +97,7 @@ static void addonChangedCallback( addons_manager_t *manager,
 
 - (void)windowDidLoad
 {
+    [self.window vlc_applyRedesignDialogShell];
     [_typeSwitcher removeAllItems];
     [_typeSwitcher addItemWithTitle:_NS("All")];
     [[_typeSwitcher lastItem] setTag: -1];

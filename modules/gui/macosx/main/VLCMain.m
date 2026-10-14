@@ -185,7 +185,7 @@ int OpenIntf (vlc_object_t *p_this)
             }
 
             const struct vlc_preparser_cfg thumbnailer_cfg = {
-                .types = VLC_PREPARSER_TYPE_THUMBNAIL_TO_FILES,
+                .types = VLC_PREPARSER_TYPE_THUMBNAIL_TO_FILES | VLC_PREPARSER_TYPE_THUMBNAIL,
                 .max_thumbnailer_threads = 1,
                 .timeout = VLC_TICK_FROM_SEC(3),
                 .external_process = false,
@@ -379,6 +379,7 @@ static VLCMain *sharedInstance = nil;
     }
 
     _statusBarIcon = [[VLCStatusBarIcon alloc] init:_p_intf];
+    [(VLCApplication *)NSApp showWelcomeIfNeeded];
 
     /* on macOS 11 and later, check whether the user attempts to deploy
      * the x86_64 binary on ARM-64 - if yes, log it */
@@ -489,6 +490,16 @@ static VLCMain *sharedInstance = nil;
 
 - (VLCLibraryWindow *)libraryWindow
 {
+    // A decoder can request its native window before the app's launch notification arrives.
+    // Keep window creation on the main thread and reuse the same controller when launch completes.
+    if (!NSThread.isMainThread) {
+        __block VLCLibraryWindow *window;
+        dispatch_sync(dispatch_get_main_queue(), ^{ window = self.libraryWindow; });
+        return window;
+    }
+    if (_libraryWindowController == nil) {
+        _libraryWindowController = [[VLCLibraryWindowController alloc] initWithLibraryWindow];
+    }
     return (VLCLibraryWindow *)_libraryWindowController.window;
 }
 

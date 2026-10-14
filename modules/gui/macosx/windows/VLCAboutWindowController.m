@@ -25,6 +25,7 @@
  * Preamble
  *****************************************************************************/
 
+#import "extensions/NSWindow+VLCAdditions.h"
 #import "VLCAboutWindowController.h"
 
 #import <vlc_intf_strings.h>
@@ -87,6 +88,7 @@
 
 - (void)windowDidLoad
 {
+    [self.window vlc_applyRedesignDialogShell];
     [[self window] setCollectionBehavior: NSWindowCollectionBehaviorFullScreenAuxiliary];
 
     NSString *copyrightText = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"NSHumanReadableCopyright"];

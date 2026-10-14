@@ -23,8 +23,11 @@
 #import "VLCMainMenu.h"
 
 #import "extensions/NSMenuItem+VLCAdditions.h"
+#import "extensions/NSMenu+VLCAdditions.h"
 #import "extensions/NSScreen+VLCAdditions.h"
 #import "extensions/NSString+Helpers.h"
+#import "extensions/NSImage+VLCAdditions.h"
+#import "windows/video/VLCMainVideoViewController.h"
 
 #import "library/VLCLibraryController.h"
 #import "library/VLCLibraryWindow.h"
@@ -50,6 +53,7 @@
 #import "playqueue/VLCPlayerController.h"
 #import "playqueue/VLCPlayQueueSortingMenuController.h"
 #import "preferences/VLCSimplePrefsController.h"
+#import "preferences/VLCHotkeyWindowController.h"
 
 #import "windows/VLCAboutWindowController.h"
 #import "windows/VLCConnectToServerDialog.h"
@@ -110,6 +114,7 @@ typedef NS_ENUM(NSInteger, VLCObjectType) {
     VLCPlayQueueSortingMenuController *_playQueueSortingController;
     VLCInformationWindowController *_infoWindowController;
     VLCRecentStreamsMenuController *_recentStreamsMenuController;
+    VLCHotkeyWindowController *_hotkeyWindowController;
 
     __strong VLCTimeSelectionPanelController *_timeSelectionPanel;
     __strong VLCCustomCropArWindowController *_customARController;
@@ -152,6 +157,15 @@ typedef NS_ENUM(NSInteger, VLCObjectType) {
 
     [self initStrings];
     [self setupKeyboardShortcuts];
+    NSMenuItem *shortcuts = [[NSMenuItem alloc] initWithTitle:_NS("Hotkeys")
+                                                     action:@selector(showHotkeys:)
+                                              keyEquivalent:@""];
+    shortcuts.target = self;
+    NSMenu *applicationMenu = NSApp.mainMenu.itemArray.firstObject.submenu;
+    NSInteger preferencesIndex = [applicationMenu indexOfItemWithTarget:self andAction:@selector(showPreferences:)];
+    if (preferencesIndex >= 0) {
+        [applicationMenu insertItem:shortcuts atIndex:preferencesIndex + 1];
+    }
 
     /* configure playback / controls menu */
     self.fileMenu.delegate = self;
@@ -362,6 +376,15 @@ typedef NS_ENUM(NSInteger, VLCObjectType) {
     [_fileMenu setTitle: _PNS("macOS MainMenu", "File")];
     [_open_generic setTitle: _NS("Advanced Open File...")];
     [_open_file setTitle: _NS("Open File...")];
+    // Exact menu icons exported from Figma 6062:13354; existing intents remain unchanged.
+    _open_file.image = [NSImage vlc_redesignImageNamed:@"menu-file"];
+    _open_disc.image = [NSImage vlc_redesignImageNamed:@"menu-disc"];
+    _open_net.image = [NSImage vlc_redesignImageNamed:@"menu-network"];
+    _open_capture.image = [NSImage vlc_redesignImageNamed:@"menu-capture"];
+    _open_recent.image = [NSImage vlc_redesignImageNamed:@"menu-recent"];
+    _convertandsave.image = [NSImage vlc_redesignImageNamed:@"menu-convert"];
+    _prefs.image = [NSImage vlc_redesignImageNamed:@"menu-settings"];
+    _about.image = [NSImage vlc_redesignImageNamed:@"menu-about"];
     [_open_disc setTitle: _NS("Open Disc...")];
     [_open_net setTitle: _NS("Open Stream...")];
     [_open_capture setTitle: _NS("Open Capture Device...")];
@@ -383,6 +406,10 @@ typedef NS_ENUM(NSInteger, VLCObjectType) {
     [_findItem setTitle: _NS("Find")];
 
     [_viewMenu setTitle: _NS("View")];
+    NSMenuItem *customize = [[NSMenuItem alloc] initWithTitle:_NS("Customize Player") action:@selector(customizePlayer:) keyEquivalent:@""];
+    customize.target = self;
+    customize.image = [NSImage vlc_redesignImageNamed:@"menu-customize"];
+    [_viewMenu addItem:customize];
 
     [_controlsMenu setTitle: _NS("Playback")];
     [_play setTitle: _NS("Play")];
@@ -1462,6 +1489,12 @@ typedef NS_ENUM(NSInteger, VLCObjectType) {
     }];
 }
 
+- (IBAction)customizePlayer:(id)sender
+{
+    (void)VLCMain.sharedInstance.libraryWindow.videoViewController.view;
+    [VLCMain.sharedInstance.libraryWindow.videoViewController customizePlayer:sender];
+}
+
 - (IBAction)intfOpenFileGeneric:(id)sender
 {
     [[VLCMain.sharedInstance open] openFileGeneric];
@@ -1572,6 +1605,13 @@ typedef NS_ENUM(NSInteger, VLCObjectType) {
     VLCMain *mainInstance = VLCMain.sharedInstance;
     NSInteger i_level = [[mainInstance voutProvider] currentStatusWindowLevel];
     [[mainInstance simplePreferences] showSimplePrefsWithLevel:i_level];
+}
+
+- (IBAction)showHotkeys:(id)sender
+{
+    if (_hotkeyWindowController.window.visible) { [_hotkeyWindowController showWindow:sender]; return; }
+    _hotkeyWindowController=[[VLCHotkeyWindowController alloc] init];
+    [_hotkeyWindowController showWindow:sender];
 }
 
 - (IBAction)openAddonManager:(id)sender
@@ -2031,6 +2071,7 @@ typedef NS_ENUM(NSInteger, VLCObjectType) {
 
 - (void)menuWillOpen:(NSMenu *)menu
 {
+    [menu vlc_applyRedesignMenuStyle];
     [_rendererMenuController startRendererDiscoveries];
     [_rendererMenuController updateRendererMenuItemEnablement];
 

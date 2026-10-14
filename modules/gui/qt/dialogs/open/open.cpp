@@ -31,6 +31,10 @@
 
 #include <QRegularExpression>
 #include <QMenu>
+#include <QListWidget>
+#include <QTabBar>
+#include <QHBoxLayout>
+#include <QLabel>
 
 #include <vlc_url.h>
 
@@ -47,6 +51,7 @@ OpenDialog::OpenDialog(qt_intf_t *_p_intf, QWindow* parent )
     ui.setupUi( this );
     setWindowTitle( qtr( "Open Media" ) );
     setWindowRole( "vlc-open-media" );
+    setObjectName(QStringLiteral("openMediaDialog"));
     setWindowModality( Qt::WindowModal );
 
     /* Tab definition and creation */
@@ -64,6 +69,38 @@ OpenDialog::OpenDialog(qt_intf_t *_p_intf, QWindow* parent )
                        qtr( "&Network" ) );
     ui.Tab->insertTab( OPEN_CAPTURE_TAB, captureOpenPanel,
                        QIcon( ":/menu/capture-card.svg" ), qtr( "Capture &Device" ) );
+
+    // Preserve the original source panels and actions, with readable navigation.
+    auto source_navigation = new QListWidget( this );
+    m_sourceNavigation = source_navigation;
+    source_navigation->setObjectName( QStringLiteral("dialogNavigation") );
+    source_navigation->setFixedWidth(200);
+    source_navigation->setSpacing(8);
+    source_navigation->setIconSize( QSize(20, 20) );
+    source_navigation->setFrameShape( QFrame::NoFrame );
+    for( int i = 0; i < ui.Tab->count(); ++i )
+    {
+        // Visible labels/icons are the existing Open Media tab definitions.
+        auto item = new QListWidgetItem( ui.Tab->tabIcon(i),
+                                        QString(ui.Tab->tabText(i)).remove('&'), source_navigation );
+        item->setSizeHint( QSize(0,40) );
+    }
+    auto source_area = new QWidget( this );
+    auto source_layout = new QHBoxLayout( source_area );
+    source_layout->setContentsMargins( 0, 0, 0, 0 );
+    source_layout->setSpacing( 20 );
+    ui.gridLayout->removeWidget( ui.Tab );
+    source_layout->addWidget( source_navigation );
+    source_layout->addWidget( ui.Tab, 1 );
+    ui.gridLayout->addWidget( source_area, 0, 0, 1, 3 );
+    ui.gridLayout->setContentsMargins( 20, 20, 20, 16 );
+    ui.gridLayout->setVerticalSpacing( 16 );
+    ui.Tab->tabBar()->hide();
+    source_navigation->setCurrentRow( ui.Tab->currentIndex() );
+    connect( source_navigation, &QListWidget::currentRowChanged,
+             ui.Tab, &QTabWidget::setCurrentIndex );
+    connect( ui.Tab, &QTabWidget::currentChanged,
+             source_navigation, QOverload<int>::of(&QListWidget::setCurrentRow) );
 
     /* Hide the Slave input widgets */
     ui.slaveLabel->hide();
@@ -154,8 +191,52 @@ OpenDialog::OpenDialog(qt_intf_t *_p_intf, QWindow* parent )
     ui.stopTimeTimeEdit->setCurrentSection( QDateTimeEdit::SecondSection );
 
     setMinimumSize( sizeHint() );
-    setMaximumWidth( 900 );
-    resize( getSettings()->value( "OpenDialog/size", QSize( 500, 400 ) ).toSize() );
+    // Adapt the supplied modal header/footer components around every original
+    // source and advanced widget, retaining the Play action's real menu.
+    auto body = new QWidget(this);
+    body->setLayout(ui.gridLayout);
+    auto shell = new QVBoxLayout(this);
+    shell->setContentsMargins(0,0,0,0);
+    shell->setSpacing(0);
+    auto header = new QWidget(this);
+    header->setObjectName(QStringLiteral("preferencesHeader"));
+    header->setFixedHeight(50);
+    auto headingLayout = new QHBoxLayout(header);
+    headingLayout->setContentsMargins(20,9,9,9);
+    auto heading = new QLabel(windowTitle(),header);
+    heading->setObjectName(QStringLiteral("openMediaHeading"));
+    headingLayout->addWidget(heading,1);
+    connect(this,&QWidget::windowTitleChanged,heading,&QLabel::setText);
+    auto headerClose = new QToolButton(header);
+    headerClose->setIcon(QIcon(QStringLiteral(":/redesign/icons/settings-close.svg")));
+    headerClose->setIconSize(QSize(24,24));
+    headerClose->setFixedSize(32,32);
+    headerClose->setAccessibleName(qtr("Close"));
+    connect(headerClose,&QToolButton::clicked,this,&OpenDialog::cancel);
+    headingLayout->addWidget(headerClose);
+    shell->addWidget(header);
+    ui.gridLayout->removeWidget(ui.buttonsBox);
+    ui.gridLayout->removeWidget(playButton);
+    ui.buttonsBox->removeButton(cancelButton);
+    ui.buttonsBox->removeButton(selectButton);
+    ui.buttonsBox->hide();
+    while(auto item=ui.gridLayout->itemAtPosition(3,0)) {ui.gridLayout->removeItem(item);delete item;}
+    shell->addWidget(body,1);
+    auto footer = new QWidget(this);
+    footer->setFixedHeight(72);
+    auto footerLayout = new QHBoxLayout(footer);
+    footerLayout->setContentsMargins(20,20,20,20);
+    cancelButton->setFixedSize(100,32);
+    selectButton->setFixedSize(100,32);
+    playButton->setFixedHeight(32);
+    playButton->setMinimumWidth(100);
+    footerLayout->addWidget(cancelButton);
+    footerLayout->addStretch();
+    footerLayout->addWidget(selectButton);
+    footerLayout->addWidget(playButton);
+    shell->addWidget(footer);
+    setMenuAction();
+    resize( getSettings()->value( "OpenDialog/size", QSize(1048,631) ).toSize() );
 }
 
 void OpenDialog::setActionFlag(OpenDialog::ActionFlag flag)
@@ -223,8 +304,12 @@ QString OpenDialog::getOptions()
     return ui.advancedLineInput->text();
 }
 
-void OpenDialog::showTab( OpenDialog::OpenTab i_tab, OpenDialog::ActionFlag i_action )
+void OpenDialog::showTab( OpenDialog::OpenTab i_tab, OpenDialog::ActionFlag i_action, bool singleSource )
 {
+    // Exact intent titles are the owner's Figma menu entries 6648:20555–20571.
+    const char *titles[] = {N_("Open File(s)"),N_("Open Disc"),N_("Open Network Stream"),N_("Open Capture Device")};
+    m_sourceNavigation->setVisible(!singleSource);
+    setWindowTitle(singleSource?qtr(titles[i_tab]):qtr("Open Media"));
     setActionFlag(i_action);
     if( i_tab == OPEN_CAPTURE_TAB ) captureOpenPanel->initialize();
     ui.Tab->setCurrentIndex( i_tab );

@@ -62,6 +62,7 @@ OpenUrlDialog::OpenUrlDialog( qt_intf_t *_p_intf,
     edit = new QLineEdit( this );
     edit->setPlaceholderText( qtr( "Enter URL here..." ) );
     edit->setValidator( new UrlValidator( edit ) );
+    edit->setMinimumHeight( 40 );
 
     QLabel *info = new QLabel( qtr( "Please enter the URL or path "
                                     "to the media you want to play."),
@@ -73,6 +74,10 @@ OpenUrlDialog::OpenUrlDialog( qt_intf_t *_p_intf,
 
     /* Layout */
     QVBoxLayout *vlay = new QVBoxLayout( this );
+    vlay->setContentsMargins( 24, 20, 24, 20 );
+    vlay->setSpacing( 20 );
+    info->setWordWrap( true );
+    setMinimumWidth( 520 );
 
     vlay->addWidget( info );
     vlay->addWidget( edit );

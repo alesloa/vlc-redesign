@@ -37,6 +37,7 @@
 #include "ui_open.h"
 
 class QString;
+class QListWidget;
 
 class OpenDialog : public QVLCDialog
 {
@@ -64,7 +65,7 @@ public:
     OpenDialog(qt_intf_t * , QWindow *parent = nullptr);
     virtual ~OpenDialog();
 
-    void showTab( OpenDialog::OpenTab tab, OpenDialog::ActionFlag action );
+    void showTab( OpenDialog::OpenTab tab, OpenDialog::ActionFlag action, bool singleSource = false );
     QString getMRL( bool b = true );
 
     QStringList getMRLs();
@@ -89,6 +90,7 @@ private:
     NetOpenPanel *netOpenPanel;
     DiscOpenPanel *discOpenPanel;
     CaptureOpenPanel *captureOpenPanel;
+    QListWidget *m_sourceNavigation = nullptr;
 
     ActionFlag i_action_flag = OPEN_AND_PLAY;
     QStringList SeparateEntries( const QString& );
