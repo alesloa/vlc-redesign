@@ -26,7 +26,18 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface NSColor (VLCAdditions)
 
+// Palette follows the orange/neutral colors in the owner-provided redesign brief.
 @property (class, readonly) NSColor *VLCAccentColor;
+@property (class, readonly) NSColor *VLCWindowBackgroundColor;
+@property (class, readonly) NSColor *VLCSurfaceBackgroundColor;
+@property (class, readonly) NSColor *VLCHeaderBackgroundColor;
+@property (class, readonly) NSColor *VLCPrimaryForegroundColor;
+@property (class, readonly) NSColor *VLCControlForegroundColor;
+@property (class, readonly) NSColor *VLCSecondaryForegroundColor;
+@property (class, readonly) NSColor *VLCAccentFillColor;
+@property (class, readonly) NSColor *VLCAccentDimColor;
+@property (class, readonly) NSColor *VLCInputBackgroundColor;
+@property (class, readonly) NSColor *VLCSelectedRowColor;
 @property (class, readonly) NSColor *VLCSubtlerAccentColor;
 @property (class, readonly) NSColor *VLClibrarySubtitleColor;
 @property (class, readonly) NSColor *VLClibraryAnnotationColor;

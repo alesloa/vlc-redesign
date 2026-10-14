@@ -32,6 +32,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (readonly) BOOL shouldShowDarkAppearance;
 
+// Restyles existing controls without changing their values, actions or bindings.
+- (void)vlc_applyRedesignStyle;
 - (void)enableSubviews:(BOOL)enabled;
 - (NSArray<NSLayoutConstraint *> *)constraintsToFillView:(NSView *)view activate:(BOOL)activate;
 - (NSArray<NSLayoutConstraint *> *)applyConstraintsToFillSuperview;

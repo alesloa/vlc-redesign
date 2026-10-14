@@ -85,6 +85,33 @@ static NSImage *ImageFromEmoji(NSString *emoji, NSSize size)
 
 @implementation NSImage(VLCAdditions)
 
++ (NSImage *)vlc_redesignImageNamed:(NSString *)name
+{
+    // Exact Figma SVGs are packaged as vector PDFs with identical root geometry for older AppKit versions.
+    NSImage *source = [NSImage imageNamed:[@"VLCRedesign-" stringByAppendingString:name]];
+    if (source == nil) return nil;
+    NSImage *image = source;
+    if ([@[@"back", @"home", @"folder", @"volume-high", @"volume-medium", @"volume-low", @"volume-muted", @"settings-video", @"settings-video-active",
+           @"settings-library", @"settings-library-active", @"settings-network",
+           @"settings-network-active", @"music", @"network", @"recent", @"library-back", @"library-forward", @"library-more", @"library-expand", @"home-chevron", @"menu-folder", @"menu-network", @"menu-convert", @"menu-recent", @"menu-customize", @"player-tab-video"] containsObject:name]) {
+        image = [NSImage imageWithSize:source.size flipped:NO drawingHandler:^BOOL(NSRect rect) {
+            [NSGraphicsContext saveGraphicsState];
+            NSAffineTransform *transform = NSAffineTransform.transform;
+            [transform translateXBy:rect.size.width yBy:0.];
+            [transform scaleXBy:-1. yBy:1.];
+            [transform concat];
+            [source drawInRect:rect];
+            [NSGraphicsContext restoreGraphicsState];
+            return YES;
+        }];
+    }
+    // Neutral exported shapes follow the current light/dark foreground at render time.
+    // Preserve source accent, swatch and two-tone volume artwork as full-color images.
+    image.template = ![name hasPrefix:@"onboarding-"] && ![name hasPrefix:@"volume-"] &&
+                     ![name hasSuffix:@"-active"] && ![name isEqualToString:@"play-accent"];
+    return image;
+}
+
 + (NSImage *)VLCAppIconImage
 {
     return [NSImage imageNamed:@"VLC"];

@@ -26,6 +26,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface NSMenu (VLCAdditions)
 
+- (void)vlc_applyRedesignMenuStyle;
+
 /* NSMenu's property itemArray becomes writeable in 10.14 and above only
  * so the following is provided as a convenience method to add multiple entries */
 - (void)addMenuItemsFromArray:(NSArray <NSMenuItem *>*)array;

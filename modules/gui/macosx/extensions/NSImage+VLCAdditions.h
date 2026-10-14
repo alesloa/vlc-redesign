@@ -29,6 +29,8 @@ struct vlc_object_t;
 
 @interface NSImage (VLCAdditions)
 
++ (nullable NSImage *)vlc_redesignImageNamed:(NSString *)name;
+
 // App images
 @property (class, readonly) NSImage *VLCAppIconImage;
 @property (class, readonly) NSImage *VLCXmasAppIconImage;

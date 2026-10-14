@@ -21,8 +21,17 @@
 *****************************************************************************/
 
 #import "NSMenu+VLCAdditions.h"
+#import "NSFont+VLCAdditions.h"
 
 @implementation NSMenu (VLCAdditions)
+
+- (void)vlc_applyRedesignMenuStyle
+{
+    // Figma application/context menu 6062:13354: Inter14. Native menu
+    // tracking, enabled states, checkmarks, key equivalents and actions remain AppKit's.
+    self.font = [NSFont vlc_redesignFontOfSize:14. weight:NSFontWeightRegular];
+    for (NSMenuItem *item in self.itemArray) [item.submenu vlc_applyRedesignMenuStyle];
+}
 
 - (void)addMenuItemsFromArray:(NSArray <NSMenuItem *>*)array
 {

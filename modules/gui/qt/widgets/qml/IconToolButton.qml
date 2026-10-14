@@ -34,9 +34,14 @@ T.ToolButton {
 
     required property string description
 
+    // Original 24px SVG artwork from the owner's Figma file can replace the
+    // icon font while keeping this button's existing interaction behavior.
+    property url iconSource: ""
+    property bool mirrorIcon: false
+
     property color color: (control.checked) ? theme.accent : theme.fg.primary
 
-    property color backgroundColor: theme.bg.primary
+    property color backgroundColor: (hovered || down) ? theme.bg.primary : "transparent"
 
     property real radius: VLCStyle.button_radius
 
@@ -78,7 +83,7 @@ T.ToolButton {
 
     // Events
 
-    Component.onCompleted: console.assert(text !== "", "text is empty")
+    Component.onCompleted: console.assert(text !== "" || iconSource.toString() !== "", "text is empty")
 
     // Children
 
@@ -100,24 +105,46 @@ T.ToolButton {
 
         color: control.backgroundColor
 
-        border.color: visualFocus ? theme.visualFocus : theme.border
+        border.color: visualFocus ? theme.visualFocus : "transparent"
 
         radius: control.radius
     }
 
-    contentItem: Widgets.IconLabel {
-        text: control.text
+    contentItem: Item {
+        implicitWidth: control.iconSource.toString() !== "" ? MainCtx.dp(24, VLCStyle.scale) : label.implicitWidth
+        implicitHeight: control.iconSource.toString() !== "" ? MainCtx.dp(24, VLCStyle.scale) : label.implicitHeight
+        baselineOffset: label.baselineOffset
 
-        color: control.color
-
-        DelayedBehavior on color {
-            delayedEnabled: theme.initialized
-
-            ColorAnimation {
-                duration: VLCStyle.duration_long
-            }
+        Image {
+            anchors.centerIn: parent
+            width: MainCtx.dp(24, VLCStyle.scale)
+            height: MainCtx.dp(24, VLCStyle.scale)
+            sourceSize: Qt.size(width, height)
+            visible: control.iconSource.toString() !== ""
+            mirror: control.mirrorIcon
+            source: visible ? SVGColorImage.colorize(control.iconSource)
+                         .any({"#8F8F8F": control.color, "#161616": control.color,
+                               "#6B6B6B": control.color}).uri() : ""
+            Accessible.ignored: true
         }
 
-        font: control.font
+        Widgets.IconLabel {
+            id: label
+            anchors.fill: parent
+            visible: control.iconSource.toString() === ""
+            text: control.text
+
+            color: control.color
+
+            DelayedBehavior on color {
+                delayedEnabled: theme.initialized
+
+                ColorAnimation {
+                    duration: VLCStyle.duration_long
+                }
+            }
+
+            font: control.font
+        }
     }
 }

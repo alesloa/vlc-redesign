@@ -192,8 +192,31 @@ FocusScope {
     }
 
     // view needs to be relayout, since items may move
-    onWidthChanged: Qt.callLater(_anchoredLayout, true)
-    onHeightChanged: Qt.callLater(_anchoredLayout, true)
+    onWidthChanged: anchoredLayoutTimer.restart()
+    onHeightChanged: anchoredLayoutTimer.restart()
+
+    // The deferred work belongs to this view. A global callLater callback can
+    // outlive the QML context when switching from the library to playback.
+    Timer {
+        id: anchoredLayoutTimer
+        interval: 0
+        onTriggered: root._anchoredLayout(true)
+    }
+
+    Timer {
+        id: contentLayoutTimer
+        interval: 0
+        onTriggered: flickable.layout(false)
+    }
+
+    Timer {
+        id: headerFocusTimer
+        interval: 0
+        onTriggered: {
+            if (root.headerItem && root.headerItem.activeFocus)
+                root.animateFlickableContentY(0)
+        }
+    }
 
     onContentWidthChanged: _anchoredLayout(true)
     onContentHeightChanged: _anchoredLayout(true)
@@ -940,14 +963,6 @@ FocusScope {
         Connections {
             target: headerItem
 
-            function _scrollToHeaderOnFocus() {
-                if (!headerItem.activeFocus)
-                    return;
-
-                // when we gain the focus ensure the widget is fully visible
-                animateFlickableContentY(0)
-            }
-
             function onHeightChanged() {
                 flickable.layout(true)
             }
@@ -955,8 +970,8 @@ FocusScope {
             function onActiveFocusChanged() {
                 // when header loads because of setting headerItem.focus == true, it will suddenly attain the active focus
                 // but then a queued flickable.layout() may take away it's focus and assign it to current item,
-                // using Qt.callLater we save unnecessary scrolling
-                Qt.callLater(_scrollToHeaderOnFocus)
+                // Defer scrolling until the queued layout settles.
+                headerFocusTimer.restart()
             }
         }
 
@@ -985,7 +1000,7 @@ FocusScope {
 
         anchors.fill: parent
 
-        onContentYChanged: { Qt.callLater(flickable.layout, false) }
+        onContentYChanged: contentLayoutTimer.restart()
 
         function getExpandItemGridId() {
             if (root.expandIndex !== -1) {

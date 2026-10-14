@@ -52,6 +52,7 @@ public:
     {
         assert(settings);
         assert(model);
+        const QPointer<T> guardedModel(model);
         settings->sync();
         if (settings->contains(m_key))
         {
@@ -69,12 +70,17 @@ public:
                 const QFileInfo fileInfo(m_recoveryFileName);
                 if (fileInfo.size() > 0)
                 {
-                    if (DialogsProvider::getInstance()->messageDialog(qtr("Do you want to restore the %1 model from %2?").arg(modelIdentifier.toLower(),
+                    const auto answer = DialogsProvider::getInstance()->messageDialog(qtr("Do you want to restore the %1 model from %2?").arg(modelIdentifier.toLower(),
                                                                                                                               fileInfo.lastModified().toString()),
                                                                       qtr("The application closed abruptly."),
                                                                       (QMessageBox::Yes | QMessageBox::No),
                                                                       QMessageBox::Yes,
-                                                                      QMessageBox::Question) == QMessageBox::Yes)
+                                                                      QMessageBox::Question);
+                    // The modal dialog runs a nested event loop. Closing VLC
+                    // there can destroy the model/settings before it returns.
+                    if (!guardedModel || !m_settings)
+                        throw std::exception();
+                    if (answer == QMessageBox::Yes)
                     {
                         model->append(m_recoveryFileName);
                         m_conditionDismissInitialDirtiness = true;
@@ -101,6 +107,9 @@ public:
             settings->setValue(m_key, m_recoveryFileName);
             settings->sync();
         }
+
+        if (!guardedModel || !m_settings)
+            throw std::exception();
 
         m_timer.setInterval(10000); // 10 seconds
         m_timer.setSingleShot(true);

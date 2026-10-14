@@ -111,8 +111,10 @@ public:
     Q_PROPERTY(CSDMetrics* csdMetrics READ getCSDMetrics NOTIFY CSDMetricsChanged FINAL)
 
     //standard color definitions used by light/dark themes
-    COLOR_DEFINITION(orange500, "#FF8800");
-    COLOR_DEFINITION(orange800, "#FF610A");
+    // Figma NbLN6ylrDsmWVVTS8Jo10z: Dark/Accent/Main and Light/Accent/Main.
+    // The existing custom/system accent preference continues to override these.
+    COLOR_DEFINITION(orange500, "#D37918");
+    COLOR_DEFINITION(orange800, "#E8851A");
 
     COLOR_DEFINITION(orange400, "#f89a06"); //FIXME name have been chosen randomly by me
     COLOR_DEFINITION(orange200, "#e29a06"); //FIXME name have been chosen randomly by me
@@ -171,6 +173,8 @@ private:
     void makeLightPalette();
     void makeDarkPalette();
     void makeSystemPalette();
+
+    void applyRedesignPalette();
 
 private:
     MainCtx* m_ctx = nullptr;

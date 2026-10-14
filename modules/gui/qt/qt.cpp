@@ -86,6 +86,7 @@ extern "C" char **environ;
 
 #include "player/player_controller.hpp"    /* THEMIM destruction */
 #include "playlist/playlist_controller.hpp" /* THEMPL creation */
+#include "style/widgettheme.hpp"
 #include "dialogs/dialogs_provider.hpp" /* THEDP creation */
 #include "dialogs/dialogs/dialogmodel.hpp"
 #ifdef _WIN32
@@ -1310,6 +1311,8 @@ static void *Thread( void *obj )
 #else
     p_intf->p_mi = new MainCtx(p_intf);
 #endif
+
+    new WidgetTheme(p_intf->p_mi);
 
     if( !p_intf->b_isDialogProvider )
     {

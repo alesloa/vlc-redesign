@@ -233,7 +233,10 @@ Item {
     component DefaultShaderEffect : ShaderEffect {
         id: shaderEffect
 
-        required property Item source
+        // A sampler must retain a stable QObject metatype. Inline QML layer
+        // types can lose their converter before the blur's other passes are
+        // destroyed, preventing ShaderEffect from clearing a dead source.
+        required property QtObject source
         readonly property int radius: root.radius
 
         property rect subRect // may not be necessary, but still needed to prevent warning

@@ -24,6 +24,14 @@
 
 @implementation NSFont (VLCAdditions)
 
++ (NSFont *)vlc_redesignFontOfSize:(CGFloat)size weight:(NSFontWeight)weight
+{
+    NSString *name = weight >= NSFontWeightSemibold ? @"Inter-SemiBold" :
+        (weight >= NSFontWeightMedium ? @"Inter-Medium" :
+        (weight <= NSFontWeightLight ? @"Inter-Light" : @"Inter-Regular"));
+    return [NSFont fontWithName:name size:size] ?: [NSFont systemFontOfSize:size weight:weight];
+}
+
 + (NSFont *)VLClibrarySectionHeaderFont
 {
     return [NSFont systemFontOfSize:24. weight:NSFontWeightBold];

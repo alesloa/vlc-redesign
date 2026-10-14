@@ -133,14 +133,15 @@ NSString * const VLCLibraryCollectionViewItemAdjustmentKey = @"VLCLibraryCollect
 
 + (const NSSize)defaultVideoItemCollectionViewItemSize
 {
-    const CGFloat width = VLCUIUnits.defaultMediaItemCollectionViewItemWidth;
+    // Figma full Library970:2703: 316px cards and 160:90 video artwork.
+    const CGFloat width = 316;
     const CGFloat imageViewHeight = width * VLCUIUnits.videoItemCollectionViewImageViewAspectRatioMultiplier;
-    return CGSizeMake(width, imageViewHeight + VLCUIUnits.mediaItemCollectionViewItemFooterTextHeight);
+    return CGSizeMake(width, imageViewHeight + VLCUIUnits.mediaItemCollectionViewItemFooterTextHeight + 16);
 }
 
 + (const CGFloat)videoItemCollectionViewImageViewAspectRatioMultiplier
 {
-    return 10. / 16.;
+    return 9. / 16.;
 }
 
 
@@ -192,10 +193,13 @@ NSString * const VLCLibraryCollectionViewItemAdjustmentKey = @"VLCLibraryCollect
     const CGFloat interItemSpacing = collectionViewLayout.minimumInteritemSpacing;
     const CGFloat availableWidth =
         collectionView.bounds.size.width - (sectionInsets.left + sectionInsets.right);
+    const BOOL video = itemsAspectRatio == VLCLibraryCollectionViewItemAspectRatioVideoItem;
+    const CGFloat minimumWidth = video ? 316 : VLCUIUnits.dynamicCollectionViewItemMinimumWidth;
+    const CGFloat maximumWidth = video ? 316 : VLCUIUnits.dynamicCollectionViewItemMaximumWidth;
     const float maxPossibleNumItemsInRow =
-        floor(availableWidth / (VLCUIUnits.dynamicCollectionViewItemMinimumWidth + interItemSpacing));
+        MAX(1, floor((availableWidth + interItemSpacing) / (minimumWidth + interItemSpacing)));
     const float minPossibleNumItemsInRow =
-        MIN(ceil(availableWidth / (VLCUIUnits.dynamicCollectionViewItemMaximumWidth + interItemSpacing)), maxPossibleNumItemsInRow);
+        MIN(ceil((availableWidth + interItemSpacing) / (maximumWidth + interItemSpacing)), maxPossibleNumItemsInRow);
 
     const NSInteger adjustment =
         [NSUserDefaults.standardUserDefaults integerForKey:VLCLibraryCollectionViewItemAdjustmentKey];
@@ -236,7 +240,7 @@ NSString * const VLCLibraryCollectionViewItemAdjustmentKey = @"VLCLibraryCollect
     const CGFloat itemHeight = itemsAspectRatio == VLCLibraryCollectionViewItemAspectRatioDefaultItem 
         ? itemWidth + VLCUIUnits.mediaItemCollectionViewItemFooterTextHeight
         : (itemWidth * VLCUIUnits.videoItemCollectionViewImageViewAspectRatioMultiplier) 
-            + VLCUIUnits.mediaItemCollectionViewItemFooterTextHeight;
+            + VLCUIUnits.mediaItemCollectionViewItemFooterTextHeight + 16;
 
     return NSMakeSize(itemWidth, itemHeight);
 }

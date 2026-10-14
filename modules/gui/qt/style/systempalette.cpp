@@ -400,6 +400,8 @@ void SystemPalette::updatePalette()
         break;
     }
 
+    applyRedesignPalette();
+
     if (m_palettePriv)
     {
         connect(
@@ -417,6 +419,81 @@ void SystemPalette::updatePalette()
         m_hasCSDImage = hasCSDImage;
         emit hasCSDImageChanged();
     }
+}
+
+// Source: Figma NbLN6ylrDsmWVVTS8Jo10z, Player 187:328, Light 2425:13624,
+// and settings 999:5047. Keep the existing color-set/state contract so every
+// QML control and QWidget dialog shares the same source-backed design values.
+void SystemPalette::applyRedesignPalette()
+{
+    using C = ColorContext;
+    const QColor surface(m_isDark ? "#0E0E0E" : "#E7E7E7");
+    const QColor chrome(m_isDark ? "#1B1B1B" : "#D5D5D5");
+    const QColor control(m_isDark ? "#191919" : "#DEDEDE");
+    const QColor field(m_isDark ? "#090909" : "#DEDEDE");
+    const QColor foreground(m_isDark ? "#8F8F8F" : "#2E2E2E");
+    const QColor secondary("#6B6B6B");
+    const QColor active(m_isDark ? "#EAEAEA" : "#2E2E2E");
+    const QColor disabled(m_isDark ? "#404040" : "#888888");
+    const QColor divider(m_isDark ? "#222222" : "#ACACAC");
+    const QColor brightDivider(m_isDark ? "#373737" : "#9B9B9B");
+    const QColor selection(m_isDark ? "#222222" : "#D5D5D5");
+    const QColor accent = m_isDark ? orange500 : orange800;
+    const QColor accentSurface(m_isDark ? "#371F06" : "#D8BA9A");
+
+    for (auto set : {C::View, C::Window, C::Item, C::TabButton,
+                    C::ToolButton, C::MenuBar, C::ButtonStandard,
+                    C::ComboBox, C::TextField, C::SpinBox, C::Tooltip})
+    {
+        setColor(set, C::Fg, C::Primary, C::Normal, foreground);
+        setColor(set, C::Fg, C::Primary, C::Disabled, disabled);
+        setColor(set, C::Fg, C::Secondary, C::Normal, secondary);
+        setColor(set, C::Decoration, C::Accent, C::Normal, accent);
+        setColor(set, C::Decoration, C::Separator, C::Normal, divider);
+        setColor(set, C::Decoration, C::VisualFocus, C::Focused, accent);
+    }
+
+    setColor(C::View, C::Bg, C::Primary, C::Normal, surface);
+    setColor(C::View, C::Bg, C::Secondary, C::Normal, field);
+    setColor(C::View, C::Bg, C::Highlight, C::Normal, accentSurface);
+    setColor(C::View, C::Decoration, C::Border, C::Normal, brightDivider);
+    setColor(C::View, C::Fg, C::Link, C::Normal, accent);
+    setColor(C::Window, C::Bg, C::Primary, C::Normal, chrome);
+    setColor(C::Window, C::Bg, C::Secondary, C::Normal, control);
+    setColor(C::Window, C::Decoration, C::Border, C::Normal, divider);
+
+    for (auto set : {C::Item, C::TabButton, C::ToolButton, C::MenuBar, C::ButtonStandard})
+    {
+        for (auto state : {C::Focused, C::Hovered, C::Pressed})
+        {
+            setColor(set, C::Bg, C::Primary, state, selection);
+            setColor(set, C::Fg, C::Primary, state, active);
+        }
+        setColor(set, C::Bg, C::Highlight, C::Normal, selection);
+        setColor(set, C::Bg, C::Highlight, C::Focused, selection);
+        setColor(set, C::Bg, C::Highlight, C::Hovered, selection);
+        setColor(set, C::Fg, C::Highlight, C::Normal, active);
+    }
+    setColor(C::ToolButton, C::Bg, C::Secondary, C::Normal, control);
+    setColor(C::Tooltip, C::Bg, C::Primary, C::Normal, field);
+    setColor(C::ButtonAccent, C::Bg, C::Primary, C::Normal, accent);
+    setColor(C::ButtonAccent, C::Bg, C::Primary, C::Pressed, accent);
+    setColor(C::ButtonAccent, C::Fg, C::Primary, C::Normal, QColor("#161616"));
+    for (auto set : {C::ComboBox, C::TextField, C::SpinBox})
+    {
+        setColor(set, C::Bg, C::Primary, C::Normal, field);
+        setColor(set, C::Bg, C::Secondary, C::Normal, control);
+        setColor(set, C::Decoration, C::Border, C::Normal, divider);
+        setColor(set, C::Decoration, C::Border, C::Focused, accent);
+        setColor(set, C::Decoration, C::Border, C::Hovered, brightDivider);
+    }
+    setColor(C::Slider, C::Bg, C::Primary, C::Normal, field);
+    setColor(C::Slider, C::Bg, C::Primary, C::Focused, field);
+    setColor(C::Slider, C::Bg, C::Primary, C::Hovered, field);
+    setColor(C::Slider, C::Bg, C::Highlight, C::Normal, accentSurface);
+    setColor(C::Slider, C::Fg, C::Primary, C::Normal, accent);
+    setColor(C::Switch, C::Bg, C::Primary, C::Normal, field);
+    setColor(C::Switch, C::Bg, C::Secondary, C::Normal, accent);
 }
 
 static quint64 makeKey(ColorContext::ColorSet colorSet, ColorContext::ColorSection section,

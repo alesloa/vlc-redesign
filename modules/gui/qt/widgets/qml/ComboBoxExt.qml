@@ -16,7 +16,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
  *****************************************************************************/
 import QtQuick
+import QtQuick.Window
 import QtQuick.Templates as T
+import QtQuick.Controls.Basic
 
 
 import VLC.MainInterface
@@ -102,6 +104,8 @@ T.ComboBox {
         z: 100
 
         width: control.width
+        height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding,
+                         Math.max(0, (control.Window.window?.height ?? implicitHeight) - VLCStyle.margin_small * 2))
         padding: 1
 
         contentItem: ListView {

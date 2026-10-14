@@ -28,6 +28,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (readonly) CGFloat titlebarHeight;
 
+/** Shared design shell around existing secondary-dialog controls and actions. */
+- (void)vlc_applyRedesignDialogShell;
+
 @end
 
 NS_ASSUME_NONNULL_END

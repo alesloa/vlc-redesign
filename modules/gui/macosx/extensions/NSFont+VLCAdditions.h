@@ -26,6 +26,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface NSFont (VLCAdditions)
 
++ (NSFont *)vlc_redesignFontOfSize:(CGFloat)size weight:(NSFontWeight)weight;
+
 @property (class, readonly) NSFont *VLClibrarySectionHeaderFont;
 @property (class, readonly) NSFont *VLCLibrarySubsectionHeaderFont;
 @property (class, readonly) NSFont *VLCLibrarySubsectionSubheaderFont;
