@@ -15,6 +15,20 @@ These paths identify the environments used for the audit. They are not prerequis
 
 Both Qt build systems register the new C++/QML models, Inter fonts and original design assets. When copying a source snapshot into an existing Meson build, explicitly reconfigure that build before compiling; preserved source timestamps can otherwise leave its generated source list stale. Linux validation enables fontconfig so the existing subtitle/OSD renderer can discover installed fonts.
 
+## Preserve standard subtitle support
+
+Source: the existing Matroska, libass, subsdec and FreeType targets in `modules/{demux,codec,text_renderer}/meson.build`, and the owner's embedded-subtitle regression. A review build using `-Dauto_features=disabled` must explicitly enable the normal subtitle stack; leaving its features `auto` disables them. Missing Matroska support makes this MKV fall back to avformat, which identifies its embedded SubRip tracks as an unknown codec in this source snapshot.
+
+With the existing build dependencies installed, retain the original build options and explicitly enable:
+
+```sh
+meson configure <build-dir> -Dmatroska=enabled -Dlibass=enabled -Dfreetype=enabled -Dfribidi=enabled -Dharfbuzz=enabled
+meson compile -C <build-dir> mkv_plugin libass_plugin freetype_plugin
+python3 modules/gui/redesign/check-subtitle-package.py <package-dir> --meson-build <build-dir>
+```
+
+Use the target names returned by `meson introspect --targets` if the local Meson version spells them differently. For Linux, also enable `fontconfig` and include its system runtime dependencies. The native repair uses the repository's checksum-verified libebml 1.4.6 and libmatroska 1.7.2 as static PIC libraries, and bundles the exact libass/shaping dependency closure. Only existing plugins are rebuilt; the delivered core bytes and GUI code are preserved. The checker rejects missing plugins or disabled subtitle features, but runtime selection and actual caption rendering remain required.
+
 ## Isolate GUI interaction checks
 
 Use an explicit temporary `--config` and `VLC_USERDATA_PATH` for test configuration and the media database. Windows paths must be Windows paths, including under Wine. On macOS, `CFFIXED_USER_HOME` alone does not isolate the Qt settings domain `com.vlc.vlc-qt-interface`.
